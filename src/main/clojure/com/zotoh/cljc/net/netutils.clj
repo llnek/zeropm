@@ -19,15 +19,14 @@
 ;;
 
 (ns ^{ :doc "" :author "kenl" }
-  com.zotoh.frwk.netutils
+  com.zotoh.cljc.net.netutils
   (:use [clojure.tools.logging :only (info warn error debug)])
   (:import (org.jboss.netty.handler.codec.http HttpMessage))  
-  (:import (java.security InvalidAlgorithmParameterException))
-  (:import (java.security KeyStore))
-  (:import (java.security KeyStoreException))
-  (:import (java.security.cert CertificateException))
-  (:import (java.security.cert X509Certificate))
-  (:import (javax.net.ssl SSLContext SSLEngine X509TrustManager TrustManagerFactorySpi TrustManager ManagerFactoryParameters))
+  (:import (java.security KeyStoreException KeyStore InvalidAlgorithmParameterException))
+  (:import (java.security.cert X509Certificate CertificateException))
+  (:import (javax.net.ssl
+    SSLContext SSLEngine X509TrustManager
+    TrustManagerFactorySpi TrustManager ManagerFactoryParameters))
   (:import (com.zotoh.frwk.net SSLTrustMgrFactory))
   (:import (com.zotoh.frwk.io XData))
   (:import (org.apache.commons.lang3 StringUtils))
@@ -40,8 +39,8 @@
   (:import (java.net URI))
   (:import (org.apache.http.entity InputStreamEntity))
   (:import (org.apache.http.params HttpConnectionParams))
-  (:require [com.zotoh.frwk.coreutils :as CU])
-  (:require [com.zotoh.frwk.strutils :as SU])
+  (:require [com.zotoh.cljc.util.coreutils :as CU])
+  (:require [com.zotoh.cljc.util.strutils :as SU])
   )
 
 (def ^:dynamic  *LHOST* "localhost")

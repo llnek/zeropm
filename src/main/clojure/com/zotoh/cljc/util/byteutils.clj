@@ -20,11 +20,12 @@
 
 (ns ^{ :doc "Utililties for handling byte[] conversions to/from numbers."
       :author "kenl" }
-  com.zotoh.frwk.byteutils
+  com.zotoh.cljc.util.byteutils
   (:use [clojure.tools.logging :only (info warn error debug)])
   (:import (java.nio ByteBuffer CharBuffer) )
   (:import (java.nio.charset Charset) )
-  (:import (java.io ByteArrayOutputStream ByteArrayInputStream DataOutputStream DataInputStream) )
+  (:import (java.io
+    ByteArrayOutputStream ByteArrayInputStream DataOutputStream DataInputStream) )
   )
 
 (defn toByteArray

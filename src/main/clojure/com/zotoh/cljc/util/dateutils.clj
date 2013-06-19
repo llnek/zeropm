@@ -19,14 +19,14 @@
 ;;
 
 (ns ^{ :doc "Date related utilities." :author "kenl" }
-  com.zotoh.frwk.dateutils
+  com.zotoh.cljc.util.dateutils
   (:import (java.util Locale TimeZone SimpleTimeZone Date Calendar GregorianCalendar))
   (:import (java.text ParsePosition SimpleDateFormat))
   (:import (java.sql Timestamp))
   (:import (org.apache.commons.lang3 StringUtils))
-  (:require [ com.zotoh.frwk.constants :as CS ])
-  (:require [ com.zotoh.frwk.coreutils :as CU ])
-  (:require [ com.zotoh.frwk.strutils :as SU ])
+  (:require [ com.zotoh.cljc.util.constants :as CS ])
+  (:require [ com.zotoh.cljc.util.coreutils :as CU ])
+  (:require [ com.zotoh.cljc.util.strutils :as SU ])
   )
 
 (defn leap-year?

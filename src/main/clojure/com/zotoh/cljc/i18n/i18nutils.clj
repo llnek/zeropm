@@ -19,13 +19,13 @@
 ;;
 
 (ns ^{ :doc "Locale resources." :author "kenl" }
-  com.zotoh.frwk.i18n
+  com.zotoh.cljc.i18n.i18nutils
   (:import (java.util PropertyResourceBundle ResourceBundle Locale))
   (:import (org.apache.commons.lang3 StringUtils))
   (:import (java.io FileInputStream))
-  (:require [ com.zotoh.frwk.metautils :as MU])
-  (:require [ com.zotoh.frwk.coreutils :as CU])
-  (:require [ com.zotoh.frwk.strutils :as SU])
+  (:require [ com.zotoh.cljc.util.metautils :as MU])
+  (:require [ com.zotoh.cljc.util.coreutils :as CU])
+  (:require [ com.zotoh.cljc.util.strutils :as SU])
   )
 
 (defn getPropertyResourceBundle

@@ -19,7 +19,7 @@
 
 (ns com.zotoh.blason.etc.core
   (:use [clojure.tools.logging :only (info debug)])
-  (:require [com.zotoh.frwk.constants :as CS])
+  (:require [com.zotoh.cljc.util.constants :as CS])
   (:gen-class))
 
 (defn -main

@@ -19,12 +19,13 @@
 ;;
 
 (ns ^{ :doc "General utilties." :author "ken" }
-  com.zotoh.frwk.coreutils
+  com.zotoh.cljc.util.coreutils
   (:use [clojure.tools.logging :only (info warn error debug)])
   ;;(:use [clojure.string])
   (:import (java.security SecureRandom))
   (:import (java.nio.charset Charset))
-  (:import (java.io InputStream File FileInputStream ByteArrayInputStream ByteArrayOutputStream))
+  (:import (java.io
+    InputStream File FileInputStream ByteArrayInputStream ByteArrayOutputStream))
   (:import (java.util Properties Date GregorianCalendar TimeZone))
   (:import (java.util.zip DataFormatException Deflater Inflater))
   (:import (java.sql Timestamp))

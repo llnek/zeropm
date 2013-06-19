@@ -19,7 +19,7 @@
 ;;
 
 (ns ^{ :doc "A class that maps the state-code to the state-name." :author "kenl" }
-  com.zotoh.frwk.usastate )
+  com.zotoh.cljc.util.usastate )
 
 (def ^:private _CCODES {
     "AL"  "Alabama"

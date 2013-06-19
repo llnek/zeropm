@@ -19,12 +19,12 @@
 ;;
 
 (ns ^{ :doc "OS Process related utilities." :author "kenl" }
-  com.zotoh.frwk.procutils
+  com.zotoh.cljc.util.procutils
   (:import (java.lang.management ManagementFactory))
   (:import (com.zotoh.frwk.util CoreUtils))
-  (:require [ com.zotoh.frwk.coreutils :as CU])
-  (:require [ com.zotoh.frwk.metautils :as MU])
-  (:require [ com.zotoh.frwk.strutils :as SU])
+  (:require [ com.zotoh.cljc.util.coreutils :as CU])
+  (:require [ com.zotoh.cljc.util.metautils :as MU])
+  (:require [ com.zotoh.cljc.util.strutils :as SU])
   )
 
 (defn asyncExec

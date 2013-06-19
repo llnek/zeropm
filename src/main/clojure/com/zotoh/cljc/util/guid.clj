@@ -19,14 +19,14 @@
 ;;
 
 (ns ^{ :doc "One way to generate an unique id." :author "kenl" }
-  com.zotoh.frwk.guid
+  com.zotoh.cljc.util.guid
   (:import (java.net InetAddress) )
   (:import (java.lang StringBuilder) )
   (:import (java.lang Math) )
-  (:require [ com.zotoh.frwk.coreutils :as CU ] )
-  (:require [ com.zotoh.frwk.strutils :as SU ] )
-  (:require [ com.zotoh.frwk.byteutils :as BU ] )
-  (:require [ com.zotoh.frwk.seqnumgen :as SQ ] )
+  (:require [ com.zotoh.cljc.util.coreutils :as CU ] )
+  (:require [ com.zotoh.cljc.util.strutils :as SU ] )
+  (:require [ com.zotoh.cljc.util.byteutils :as BU ] )
+  (:require [ com.zotoh.cljc.util.seqnumgen :as SQ ] )
   )
 
 (declare splitHiLoTime)

@@ -19,7 +19,7 @@
 ;;
 
 (ns ^{ :doc "A class that maps country-codes to the country-names." :author "kenl" }
-  com.zotoh.frwk.countrycode )
+  com.zotoh.cljc.util.countrycode )
 
 (def ^:private _CCODES {
     "AF"  "Afghanistan"

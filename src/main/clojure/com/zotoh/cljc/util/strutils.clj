@@ -20,7 +20,7 @@
 
 (ns ^{  :doc "String utilities."
         :author "kenl" }      
-  com.zotoh.frwk.strutils
+  com.zotoh.cljc.util.strutils
   (:import (java.io CharArrayWriter File OutputStream OutputStreamWriter Reader Writer))
   (:import (java.util Arrays Collection Iterator StringTokenizer))
   (:import (java.lang StringBuilder))

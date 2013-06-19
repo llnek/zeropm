@@ -19,14 +19,15 @@
 ;;
 
 (ns ^{ :doc "General file related utilities." :author "kenl" }
-  com.zotoh.frwk.fileutils
-  (:import (java.io File FileInputStream FileOutputStream InputStream OutputStream ))
+  com.zotoh.cljc.util.fileutils
+  (:import (java.io
+    File FileInputStream FileOutputStream InputStream OutputStream ))
   (:import (java.util ArrayList))
   (:import (org.apache.commons.io FileUtils))
   (:import (org.apache.commons.lang3 StringUtils))
   (:import (org.apache.commons.io IOUtils))
   (:import (java.util.zip ZipFile ZipEntry))
-  (:require [ com.zotoh.frwk.coreutils :as CU ] )
+  (:require [ com.zotoh.cljc.util.coreutils :as CU ] )
   )
 
 (defn isFileWR?

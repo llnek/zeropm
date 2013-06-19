@@ -19,7 +19,7 @@
 ;;
 
 (ns ^{ :doc "Generate some sequence numbers." :author "kenl" }
-  com.zotoh.frwk.seqnumgen
+  com.zotoh.cljc.util.seqnumgen
   (:import (java.util.concurrent.atomic AtomicLong AtomicInteger) )
   )
 

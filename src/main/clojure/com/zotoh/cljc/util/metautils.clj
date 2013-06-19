@@ -20,10 +20,10 @@
 
 (ns ^{  :doc "Utility functions for class related or reflection related operations."
         :author "kenl" }      
-  com.zotoh.frwk.metautils
+  com.zotoh.cljc.util.metautils
   (:import (java.lang.reflect Field Method Modifier))
-  (:require [ com.zotoh.frwk.coreutils :as CU ] )
-  (:require [ com.zotoh.frwk.strutils :as SU ] )
+  (:require [ com.zotoh.cljc.util.coreutils :as CU ] )
+  (:require [ com.zotoh.cljc.util.strutils :as SU ] )
   )
 
 (defn isChildCZ

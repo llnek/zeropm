@@ -19,11 +19,11 @@
 ;;
 
 (ns ^{ :doc "Util functions related to stream/io."  :author "kenl" }
-  com.zotoh.frwk.ioutils
-  (:require [ com.zotoh.frwk.coreutils :as CU])
-  (:import (java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream))
-  (:import (java.io File FileInputStream FileOutputStream CharArrayWriter OutputStreamWriter))
-  (:import (java.io InputStream InputStreamReader OutputStream Reader Writer))
+  com.zotoh.cljc.util.ioutils
+  (:import (java.io
+    ByteArrayInputStream ByteArrayOutputStream DataInputStream
+    FileInputStream FileOutputStream CharArrayWriter OutputStreamWriter
+    File InputStream InputStreamReader OutputStream Reader Writer))
   (:import (java.util.zip GZIPInputStream GZIPOutputStream))
   (:import (com.zotoh.frwk.io XData XStream))
   (:import (org.apache.commons.lang3 StringUtils))
@@ -31,6 +31,7 @@
   (:import (org.apache.commons.io IOUtils))
   (:import (org.xml.sax InputSource))
   (:import (java.nio.charset Charset))
+  (:require [ com.zotoh.cljc.util.coreutils :as CU])
   )
 
 (def ^:private HEX_CHS [ \0 \1 \2 \3 \4 \5 \6 \7 \8 \9 \A \B \C \D \E \F ])

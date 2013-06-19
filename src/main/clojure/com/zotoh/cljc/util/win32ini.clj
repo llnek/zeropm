@@ -18,13 +18,13 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 
 (ns ^{ :doc "Functions to load and query a .ini file." :author "kenl" }
-  com.zotoh.frwk.win32ini
-  (:import (org.apache.commons.lang3 StringUtils))
+  com.zotoh.cljc.util.win32ini
   (:import (java.io File IOException FileReader LineNumberReader PrintStream))
   (:import (java.util LinkedHashMap))
   (:import (com.zotoh.frwk.util NCMap))
-  (:require [ com.zotoh.frwk.coreutils :as CU ] )
-  (:require [ com.zotoh.frwk.strutils :as SU ] )
+  (:import (org.apache.commons.lang3 StringUtils))
+  (:require [ com.zotoh.cljc.util.coreutils :as CU ] )
+  (:require [ com.zotoh.cljc.util.strutils :as SU ] )
   )
 
 (defprotocol IWin32Conf

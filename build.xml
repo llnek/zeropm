@@ -39,24 +39,24 @@
   <target name="compile_clj">
     <java classname="clojure.lang.Compile" fork="true" failonerror="true" maxmemory="2048m" classpathref="compile.path.id">
       <sysproperty key="clojure.compile.path" value="${build.dir}" />
-      <arg value="com.zotoh.frwk.byteutils" />
-      <arg value="com.zotoh.frwk.cmdlineseq" />
-      <arg value="com.zotoh.frwk.constants" />
-      <arg value="com.zotoh.frwk.coreutils" />
-      <arg value="com.zotoh.frwk.countrycode" />
-      <arg value="com.zotoh.frwk.dateutils" />
-      <arg value="com.zotoh.frwk.fileutils" />
-      <arg value="com.zotoh.frwk.guid" />
-      <arg value="com.zotoh.frwk.i18n" />
-      <arg value="com.zotoh.frwk.ioutils" />
-      <arg value="com.zotoh.frwk.metautils" />
-      <arg value="com.zotoh.frwk.netutils" />
-      <arg value="com.zotoh.frwk.nettyio" />
-      <arg value="com.zotoh.frwk.procutils" />
-      <arg value="com.zotoh.frwk.seqnumgen" />
-      <arg value="com.zotoh.frwk.strutils" />
-      <arg value="com.zotoh.frwk.usastate" />
-      <arg value="com.zotoh.frwk.win32ini" />
+      <arg value="com.zotoh.cljc.util.byteutils" />
+      <arg value="com.zotoh.cljc.util.cmdlineseq" />
+      <arg value="com.zotoh.cljc.util.constants" />
+      <arg value="com.zotoh.cljc.util.coreutils" />
+      <arg value="com.zotoh.cljc.util.countrycode" />
+      <arg value="com.zotoh.cljc.util.dateutils" />
+      <arg value="com.zotoh.cljc.util.fileutils" />
+      <arg value="com.zotoh.cljc.util.guid" />
+      <arg value="com.zotoh.cljc.util.ioutils" />
+      <arg value="com.zotoh.cljc.util.metautils" />
+      <arg value="com.zotoh.cljc.util.procutils" />
+      <arg value="com.zotoh.cljc.util.seqnumgen" />
+      <arg value="com.zotoh.cljc.util.strutils" />
+      <arg value="com.zotoh.cljc.util.usastate" />
+      <arg value="com.zotoh.cljc.util.win32ini" />
+      <arg value="com.zotoh.cljc.i18n.i18nutils" />
+      <arg value="com.zotoh.cljc.net.netutils" />
+      <arg value="com.zotoh.cljc.netty.nettyio" />
       <arg value="com.zotoh.blason.etc.core" />
     </java>
   </target>

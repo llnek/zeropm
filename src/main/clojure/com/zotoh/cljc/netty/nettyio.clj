@@ -19,7 +19,7 @@
 ;;
 
 (ns ^{ :doc "" :author "kenl" }
-  com.zotoh.frwk.nettyio
+  com.zotoh.cljc.netty.nettyio
   (:use [clojure.tools.logging :only (info warn error debug)])
   (:import (com.zotoh.frwk.io XData))
   (:import (com.zotoh.frwk.net NetUtils HTTPResponseHdlr))
@@ -34,15 +34,19 @@
   (:import (javax.net.ssl SSLEngine))
   (:import (org.jboss.netty.bootstrap ClientBootstrap))
   (:import (org.jboss.netty.buffer ByteBufferBackedChannelBuffer))
-  (:import (org.jboss.netty.channel Channel SimpleChannelHandler ChannelFuture ChannelFutureListener ChannelPipeline ChannelPipelineFactory))
+  (:import (org.jboss.netty.channel
+    Channel SimpleChannelHandler ChannelFuture
+    ChannelFutureListener ChannelPipeline ChannelPipelineFactory))
   (:import (org.jboss.netty.channel.group DefaultChannelGroup ChannelGroup))
   (:import (org.jboss.netty.channel.socket.nio NioClientSocketChannelFactory))
-  (:import (org.jboss.netty.handler.codec.http HttpResponseStatus DefaultHttpResponse HttpClientCodec HttpChunk HttpHeaders HttpMethod HttpRequest HttpResponse HttpVersion DefaultHttpRequest ))
+  (:import (org.jboss.netty.handler.codec.http
+    HttpResponseStatus DefaultHttpResponse HttpClientCodec
+    HttpChunk HttpHeaders HttpMethod HttpRequest HttpResponse HttpVersion DefaultHttpRequest ))
   (:import (org.jboss.netty.handler.ssl SslHandler))
   (:import (org.jboss.netty.handler.stream ChunkedWriteHandler ChunkedStream))
-  (:require [com.zotoh.frwk.coreutils :as CU])
-  (:require [com.zotoh.frwk.strutils :as SU])
-  (:require [com.zotoh.frwk.netutils :as NU])
+  (:require [com.zotoh.cljc.util.coreutils :as CU])
+  (:require [com.zotoh.cljc.util.strutils :as SU])
+  (:require [com.zotoh.cljc.net.netutils :as NU])
   )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
