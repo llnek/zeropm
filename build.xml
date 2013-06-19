@@ -51,6 +51,7 @@
       <arg value="com.zotoh.frwk.ioutils" />
       <arg value="com.zotoh.frwk.metautils" />
       <arg value="com.zotoh.frwk.netutils" />
+      <arg value="com.zotoh.frwk.nettyio" />
       <arg value="com.zotoh.frwk.procutils" />
       <arg value="com.zotoh.frwk.seqnumgen" />
       <arg value="com.zotoh.frwk.strutils" />
