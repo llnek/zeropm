@@ -1,0 +1,271 @@
+<project name="common" xmlns:ivy="antlib:org.apache.ivy.ant">
+
+  <dirname property="common.basedir" file="${ant.file.common}"/>
+  <property name="ivy.settings.dir" value="${common.basedir}"/>
+
+  <ivy:settings file="${ivy.settings.dir}/ivysettings.xml" />
+  <taskdef resource="net/sf/antcontrib/antlib.xml"/>
+
+  <macrodef name = "git">
+    <attribute name = "command" />
+    <attribute name = "dir" default = "" />
+    <element name = "args" optional = "true" />
+    <sequential>
+        <echo message = "git @{command}" />
+        <exec executable = "git" dir = "@{dir}">
+            <arg value = "@{command}" />
+            <args/>
+        </exec>
+    </sequential>
+  </macrodef>
+
+  <path id="clojure.path.id">
+    <fileset dir="${clojure.dir}"/>
+  </path>
+
+  <!-- =================================
+        target: resolve ivy stuff
+       ================================= -->
+
+  <target name="resolve">
+      <!-- conf="*" will copie artifacts defined for each conf in a dir matching conf name -->
+    <ivy:retrieve pattern="${ivy.lib.dir}/[conf]/[artifact]-[revision].[ext]"/>
+  </target>
+
+
+  <!-- =================================
+        target: build
+       ================================= -->
+
+  <target name="build" depends="clean,check-tpcl,resolve,pre-build">
+
+    <echo level="info" message="#############################################"/>
+    <echo level="info" message="#                                           #"/>
+    <echo level="info" message="Building module ${ant.project.name}"/>
+    <echo level="info" message="#                                           #"/>
+    <echo level="info" message="#############################################"/>
+
+    <antcall target="compile_and_jar"/>
+
+  </target>
+
+  <!-- =================================
+        target: test-build
+       ================================= -->
+
+  <target name="test-build" depends="build">
+
+    <antcall target="compile_test_code"/>
+    <antcall target="run_test_code"/>
+
+    <echo level="verbose" message="test called - OK"/>
+
+  </target>
+
+  <!-- =================================
+      target: publish
+     ================================= -->
+
+  <target name="pub-distro" depends="just-jar,distro-package">
+
+    <antcall target="clean4distro"/>
+
+    <ivy:publish resolver="local-repo" overwrite="true" status="release" 
+      pubrevision="${build.version}" >
+      <artifacts pattern="${distrib.dir}/[artifact]-${build.version}.[ext]" />
+    </ivy:publish>
+
+    <echo message="Project ${PID} released with version ${build.version}" />
+  </target>
+
+  <target name="pub-jar" depends="test-build"> </target>
+  <target name="just-jar" depends="build"> </target>
+
+  <!-- =================================
+      target: clean
+     ================================= -->
+
+  <target name="clean">
+    <delete dir="${build.dir}"/>
+    <delete dir="${distrib.dir}"/>
+    <delete dir="${pack.dir}"/>
+    <delete dir="${lib.dir}"/>
+    <mkdir dir="${antbuild.dir}"/>
+  </target>
+
+  <!-- =================================
+        target: clean-cache
+       ================================= -->
+
+  <target name="clean-cache">
+    <ivy:cleancache />
+  </target>
+
+  <!-- =================================
+      target: clean-local
+     ================================= -->
+
+  <target name="clean-local">
+    <echo message="${ivy.lrepo.dir}"/>
+  </target>
+
+  <!-- =================================
+        target: report
+       ================================= -->
+
+  <target name="report" depends="resolve">
+    <ivy:report todir="${build.dir}"/>
+  </target>
+
+  <!-- =================================
+      target: distro-package
+     ================================= -->
+
+  <target name="distro-package" depends="distro-init">
+      <antcall target="common.pack-and-distro"/>
+  </target>
+
+
+  <target name="distro-init">
+    <delete dir="${pack.dir}"/>
+    <mkdir dir="${pack.dir}"/>
+    <mkdir dir="${pack.dir}/boot"/>
+    <mkdir dir="${pack.dir}/dist"/>
+    <mkdir dir="${pack.dir}/bin"/>
+    <mkdir dir="${pack.dir}/etc"/>
+    <mkdir dir="${pack.dir}/patch"/>
+    <mkdir dir="${pack.dir}/lib"/>
+    <mkdir dir="${pack.dir}/logs"/>
+    <mkdir dir="${pack.dir}/docs/samples"/>
+    <mkdir dir="${pack.dir}/docs/src"/>
+    <mkdir dir="${pack.dir}/lics"/>
+    <mkdir dir="${pack.dir}/tmp"/>
+    <mkdir dir="${pack.dir}/exec"/>
+    <mkdir dir="${pack.dir}/apps"/>
+    <mkdir dir="${pack.dir}/blocks"/>
+    <mkdir dir="${pack.dir}/pods"/>
+    <mkdir dir="${pack.dir}/dbs"/>
+    <touch file="${pack.dir}/VERSION"/>
+    <echo message="${build.version}" file="${pack.dir}/VERSION"/>
+    <copy todir="${pack.dir}/etc">
+      <fileset dir="${basedir}/etc"/>
+    </copy>
+  </target>
+
+  <target name="pack-and-distro" depends="pack-res, pack-docs, pack-src, pack-lics, pack-bin, pack-dist, pack-libs, pack-samples,pack-all">
+  </target>
+
+  <!-- =================================
+        target: pack-res
+       ================================= -->
+
+  <target name="pack-res">
+      <antcall target="pack_resources"/>
+  </target>
+
+  <!-- =================================
+        target: pack-docs
+       ================================= -->
+
+  <target name="pack-docs">
+    <!--
+      <antcall target="pack_all_docs"/>
+      -->
+  </target>
+
+  <!-- =================================
+        target: pack-src
+       ================================= -->
+
+  <target name="pack-src">
+      <antcall target="pack_source_code"/>
+  </target>
+
+  <!-- =================================
+        target: pack-lics
+       ================================= -->
+
+  <filelist id="lic-txts">
+    <file name="${basedir}/RELEASE-NOTES.txt"/>
+    <file name="${basedir}/README.md"/>
+    <file name="${basedir}/NOTICE.txt"/>
+    <file name="${basedir}/LICENSE.txt"/>
+  </filelist>
+
+  <target name="pack-lics">
+
+    <copy todir="${pack.dir}/lics" >
+      <fileset dir="${basedir}/lics" erroronmissingdir="false" />
+    </copy>
+
+    <copy todir="${pack.dir}" flatten="true">
+      <filelist refid="lic-txts"/>
+    </copy>
+
+  </target>
+
+  <!-- =================================
+        target: pack-dist
+       ================================= -->
+
+  <target name="pack-dist">
+    <antcall target="pack_all_dist"/>
+  </target>
+
+
+  <!-- =================================
+        target: pack-libs
+       ================================= -->
+
+  <target name="pack-libs">
+    <antcall target="pack_all_libs"/>
+  </target>
+
+
+  <!-- =================================
+        target: pack-bin
+       ================================= -->
+
+  <target name="pack-bin">
+      <antcall target="pack_bin_scripts"/>
+  </target>
+
+  <!-- =================================
+        target: pack-samples
+       ================================= -->
+
+  <target name="pack-samples">
+      <antcall target="pack_samples"/>
+  </target>
+  <!-- =================================
+        target: pack-all
+       ================================= -->
+
+  <target name="pack-all">
+    <delete dir="${pack.dir}/tmp"/>
+    <mkdir dir="${pack.dir}/tmp"/>
+    <tar destfile="${distrib.dir}/${PID-DISTRO}-${build.version}.tar.gz" compression="gzip">
+        <tarfileset dir="${pack.dir}">
+            <exclude name="bin/**"/>
+        </tarfileset>
+        <tarfileset dir="${pack.dir}" filemode="755">
+            <include name="bin/**"/>
+        </tarfileset>
+    </tar>
+    <gzip destfile="${distrib.dir}/${PID-DISTRO}-${build.version}.tar.gz" src="${distrib.dir}/${PID-DISTRO}.tar"/>
+    <!--
+    <zip destfile="${distrib.dir}/${PID-DISTRO}.zip"><fileset dir="${pack.dir}"/></zip>
+  -->
+  </target>
+
+
+  <target name="check-tpcl"></target>
+
+  <target name="pre-build">
+    <mkdir dir="${distrib.dir}"/>
+    <mkdir dir="${lib.dir}"/>
+    <mkdir dir="${lib.dir}/libjar"/>
+    <mkdir dir="${build.dir}" />
+  </target>
+
+</project>

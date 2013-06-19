@@ -1,0 +1,162 @@
+#!/bin/bash
+
+splash2() {
+  echo ""
+  echo "bbbbbbbb                                                                                         "
+  echo "b::::::b            lllllll                                                                      "
+  echo "b::::::b            l:::::l                                                                      "
+  echo "b::::::b            l:::::l                                                                      "
+  echo "b:::::b            l:::::l                                                                      "
+  echo "b:::::bbbbbbbbb     l::::l   aaaaaaaaaaaaa      ssssssssss      ooooooooooo   nnnn  nnnnnnnn    "
+  echo "b::::::::::::::bb   l::::l   a::::::::::::a   ss::::::::::s   oo:::::::::::oo n:::nn::::::::nn  "
+  echo "b::::::::::::::::b  l::::l   aaaaaaaaa:::::ass:::::::::::::s o:::::::::::::::on::::::::::::::nn "
+  echo "b:::::bbbbb:::::::b l::::l            a::::as::::::ssss:::::so:::::ooooo:::::onn:::::::::::::::n"
+  echo "b:::::b    b::::::b l::::l     aaaaaaa:::::a s:::::s  ssssss o::::o     o::::o  n:::::nnnn:::::n"
+  echo "b:::::b     b:::::b l::::l   aa::::::::::::a   s::::::s      o::::o     o::::o  n::::n    n::::n"
+  echo "b:::::b     b:::::b l::::l  a::::aaaa::::::a      s::::::s   o::::o     o::::o  n::::n    n::::n"
+  echo "b:::::b     b:::::b l::::l a::::a    a:::::assssss   s:::::s o::::o     o::::o  n::::n    n::::n"
+  echo "b:::::bbbbbb::::::bl::::::la::::a    a:::::as:::::ssss::::::so:::::ooooo:::::o  n::::n    n::::n"
+  echo "b::::::::::::::::b l::::::la:::::aaaa::::::as::::::::::::::s o:::::::::::::::o  n::::n    n::::n"
+  echo "b:::::::::::::::b  l::::::l a::::::::::aa:::as:::::::::::ss   oo:::::::::::oo   n::::n    n::::n"
+  echo "bbbbbbbbbbbbbbbb   llllllll  aaaaaaaaaa  aaaa sssssssssss       ooooooooooo     nnnnnn    nnnnnn"
+  echo ""
+}
+
+#font= crawford
+splash() {
+  echo ""
+  echo " ____   _       ____  _____  ___   ____  "
+  echo "|    \ | T     /    T/ ___/ /   \ |    \ "
+  echo "|  o  )| |    Y  o  (   \_ Y     Y|  _  Y"
+  echo "|     T| l___ |     |\__  T|  O  ||  |  |"
+  echo "|  O  ||     T|  _  |/  \ ||     ||  |  |"
+  echo "|     ||     ||  |  |\    |l     !|  |  |"
+  echo "l_____jl_____jl__j__j \___j \___/ l__j__j"
+  echo ""
+  echo -n "Version: "
+  cat $BLASON_HOME/VERSION
+  echo ""
+  echo ""
+
+}
+
+### osx sux, has no proper readlink.
+check_darwin() {
+  BLASON_BIN=$( perl -e 'use Cwd "abs_path";print abs_path(shift)' $0 )
+  BLASON_BIN=$( dirname $BLASON_BIN )
+  BLASON_HOME=$( dirname $BLASON_BIN )
+}
+check_linux() {
+  BLASON_BIN=$(dirname $(readlink -f $0))/../
+  BLASON_HOME=$(readlink -f $BLASON_BIN)
+  BLASON_BIN=$BLASON_HOME/bin
+}
+
+OSTYPE=`uname -s`
+CWD=`pwd`
+
+if [ "$OSTYPE" = "Darwin" ]; then
+  check_darwin
+else
+  check_linux
+fi
+
+if [ "$JAVA_HOME" = "" ] ; then
+  echo "Attempt to reference standard java location on system: /usr/bin."
+  #echo "Please set JAVA_HOME"
+  #exit -1
+  JAVA_HOME=/usr
+fi
+
+JPROF=-agentpath:/Applications/jprofiler7/bin/macos/libjprofilerti.jnilib=port=8849
+DBGOPTS="-agentlib:jdwp=transport=dt_socket,server=y,address=8787,suspend=n"
+PATCHDIR=$BLASON_HOME/patch/*
+DISTRO=$BLASON_HOME/dist/*
+BOOT=$BLASON_HOME/boot/*
+LIBDIR=$BLASON_HOME/lib/*
+BCP=$BOOT:$DISTRO:$LIBDIR:$CLASSPATH
+
+JAVA_CMD=$JAVA_HOME/bin/java
+DBGOPTS=
+BG=false
+
+VMXRGS=" -XX:+CMSClassUnloadingEnabled -XX:+UseConcMarkSweepGC -XX:MaxPermSize=256m"
+#CLDR=" -Djava.system.class.loader=com.zotoh.blason.loaders.ExecClassLoader"
+MAINCZ=com.zotoh.blason.etc.core
+
+LIBP="-Djava.library.path=$BLASON_HOME/bin"
+#48G
+#VMARGS="-Xms8192m -Xmx49152m"
+#36G
+#VMARGS="-Xms8192m -Xmx36864m"
+#32G
+#VMARGS="-Xms8192m -Xmx32768m"
+VMARGS="-Xms512m -Xmx7096m $VMXRGS"
+LOG4J=etc/log/logback.xml
+L4JFILE=${BLASON_HOME}/$LOG4J
+L4J=file:${L4JFILE}
+LOGCFG=$L4J
+#LOGREF="-Dlogback.configurationFile=$LOGCFG -Dlogback.ContextSelector=com.zotoh.frwk.util.LogbackCtxSelector"
+LOGREF="-Dlogback.configurationFile=$LOGCFG"
+BASEDIR="-Dblason.home=$BLASON_HOME"
+KPORT=4444
+KILLPORT="-Dblason.kill.port=$KPORT"
+
+show_proc() {
+    pid=$( ps -ef | grep blason.etc.AppRunner | grep -v grep | awk '{print $2}' )
+    if [ -n "$pid" ]; then
+      echo "Blason is running with process-id: ${pid}."
+    else
+      echo "Blason is not running."
+    fi
+}
+stop_proc() {
+    pid=$( ps -ef | grep blason.etc.AppRunner | grep -v grep | awk '{print $2}' )
+    if [ -n "$pid" ]; then
+      #kill $pid
+      cd /tmp
+      wget http://127.0.0.1:$KPORT/kill9 2>&1 > /dev/null
+      cd $CWD
+    fi
+}
+
+if [ ! -e ${L4JFILE} ]; then
+    LOGREF=
+fi
+
+if [ $# -eq 2 ] ; then
+    if [ "$1" = "start" -a "$2" = "bg" ]; then
+       BG=true
+    fi
+fi
+
+if [ $# -eq 1 -a "$1" = "debug" ]; then
+  echo "remote debug mode"
+else
+  DBGOPTS=
+fi
+
+if [ $# -eq 1 -a "$1" = "stop" ]; then
+  echo "stopping blason..."
+  stop_proc
+  exit $?
+fi
+
+if [ $# -eq 1 -a "$1" = "status" ]; then
+  show_proc
+  exit 0
+fi
+
+#CMDLINE="$JAVA_CMD -cp $BCP $DBGOPTS $LOGREF $BASEDIR $CLDR $MAINCZ $BLASON_HOME $@ "
+cd $BLASON_BIN
+if [ "$BG" = "true" ]; then
+  nohup $JAVA_CMD $VMARGS -cp $BCP $LIBP $DBGOPTS $LOGREF $KILLPORT $BASEDIR $CLDR $MAINCZ $BLASON_HOME $@ &
+else
+  splash
+  $JAVA_CMD $VMARGS -cp $BCP $LIBP $DBGOPTS $LOGREF $KILLPORT $BASEDIR $CLDR $MAINCZ $BLASON_HOME $@
+fi
+cd $CWD
+exit 0
+
+
+

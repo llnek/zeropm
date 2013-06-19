@@ -1,0 +1,119 @@
+#!/bin/bash
+
+#font= crawford
+splash() {
+  echo ""
+  echo " __ __  ______  ______  ____    _____ __ __  ____  "
+  echo "|  T  T|      T|      T|    \  / ___/|  T  ||    \ "
+  echo "|  l  ||      ||      ||  o  )(   \_ |  |  ||  D  )"
+  echo "|  _  |l_j  l_jl_j  l_j|   _/  \__  T|  |  ||    / "
+  echo "|  |  |  |  |    |  |  |  |    /  \ |l  :  !|    \ "
+  echo "|  |  |  |  |    |  |  |  |    \    | \   / |  .  Y"
+  echo "l__j__j  l__j    l__j  l__j     \___j  \_/  l__j\_j"
+  echo ""
+  echo -n "Version: "
+  cat $BLASON_HOME/VERSION
+  echo ""
+  echo ""
+}
+
+### osx sux, has no proper readlink.
+check_darwin() {
+  BLASON_BIN=$( perl -e 'use Cwd "abs_path";print abs_path(shift)' $0 )
+  BLASON_BIN=$( dirname $BLASON_BIN )
+  BLASON_HOME=$( dirname $BLASON_BIN )
+}
+check_linux() {
+  BLASON_BIN=$(dirname $(readlink -f $0))/../
+  BLASON_HOME=$(readlink -f $BLASON_BIN)
+  BLASON_BIN=$BLASON_HOME/bin
+}
+
+OSTYPE=`uname -s`
+CWD=`pwd`
+
+if [ "$OSTYPE" = "Darwin" ]; then
+  check_darwin
+else
+  check_linux
+fi
+
+if [ "$JAVA_HOME" = "" ] ; then
+  echo "Attempt to reference standard java location on system: /usr/bin."
+  #echo "Please set JAVA_HOME"
+  #exit -1
+  JAVA_HOME=/usr
+fi
+
+CARGS="-host 127.0.0.1 -port 6363 -conf $BLASON_HOME/conf/mhttpd.conf"
+
+PATCHDIR=$BLASON_HOME/patch/*
+DISTRO=$BLASON_HOME/dist/*
+BOOT=$BLASON_HOME/boot/*
+LIBDIR=$BLASON_HOME/lib/*
+BCP=$PATCHDIR:$DISTRO:$LIBDIR:$CLASSPATH
+
+JAVA_CMD=$JAVA_HOME/bin/java
+DBGOPTS=
+BG=false
+
+VMXRGS=" -XX:+CMSClassUnloadingEnabled -XX:+UseConcMarkSweepGC -XX:MaxPermSize=256m"
+MAINCZ=com.zotoh.frwk.net.SimpleHTTPServer
+
+LIBP="-Djava.library.path=$BLASON_HOME/bin"
+VMARGS="-Xms512m -Xmx7096m $VMXRGS"
+LOG4J=etc/log/mhttpd.xml
+L4JFILE=${BLASON_HOME}/$LOG4J
+L4J=file:${L4JFILE}
+LOGCFG=$L4J
+LOGREF="-Dlogback.configurationFile=$LOGCFG"
+BASEDIR="-Dblason.home=$BLASON_HOME"
+
+show_proc() {
+  pid=$( ps -ef | grep frwk.net.SimpleHTTPServer | grep -v grep | awk '{print $2}' )
+  if [ -n "$pid" ]; then
+      echo "mhttpd is running with process-id: ${pid}."
+  else
+      echo "mhttpd is not running."
+  fi
+}
+stop_proc() {
+  pid=$( ps -ef | grep frwk.net.SimpleHTTPServer | grep -v grep | awk '{print $2}' )
+  if [ -n "$pid" ]; then
+    kill $pid
+  fi
+}
+
+if [ ! -e ${L4JFILE} ]; then
+    LOGREF=
+fi
+
+if [ $# -eq 2 ] ; then
+    if [ "$1" = "start" -a "$2" = "bg" ]; then
+       BG=true
+    fi
+fi
+
+if [ $# -eq 1 -a "$1" = "stop" ]; then
+  echo "stopping mhttpd..."
+  stop_proc
+  exit $?
+fi
+
+if [ $# -eq 1 -a "$1" = "status" ]; then
+  show_proc
+  exit 0
+fi
+
+cd $BLASON_BIN
+if [ "$BG" = "true" ]; then
+  nohup $JAVA_CMD $VMARGS -cp $BCP $LOGREF $BASEDIR $MAINCZ $BLASON_HOME $CARGS &
+else
+  splash
+  $JAVA_CMD $VMARGS -cp $BCP $LOGREF $BASEDIR $MAINCZ $BLASON_HOME $CARGS
+fi
+cd $CWD
+exit 0
+
+
+

@@ -1,0 +1,307 @@
+<project name="blason" basedir="." default="release" xmlns:ivy="antlib:org.apache.ivy.ant">
+
+  <property name="PID-DISTRO" value="${ant.project.name}-distro"/>
+  <property name="PID" value="${ant.project.name}"/>
+  <property file="build.properties" />
+  <include file="${basedir}/common.xml"/>
+  <property name="src.blason" value="${src.dir}/clojure/com/zotoh/blason"/>
+
+  <!--
+       paths used for compilation and run  
+       -->
+
+  <path id="compile.path.id">
+    <fileset dir="${lib.dir}/libjar" />
+    <path location="${build.dir}" />
+    <path location="${src.dir}/clj" />
+  </path>
+
+  <path id="test.path.id">
+    <path location="${build.dir}" />
+    <path location="${build.test.dir}" />
+    <fileset dir="${lib.dir}/test" />
+  </path>
+
+  <!--
+       compile source code
+       -->
+
+  <target name="compile_java">
+
+    <javac sourcepath="" srcdir="${src.dir}/java" destdir="${build.dir}"
+      includeantruntime="false" excludes=""
+      debug="${build.debug}" debuglevel="lines,vars,source" classpathref="compile.path.id">
+      <compilerarg line="-Xlint:deprecation -Xlint:unchecked"/>
+      <include name="**/*.java"/>
+    </javac>
+
+  </target>
+
+  <target name="compile_clj">
+    <java classname="clojure.lang.Compile" fork="true" failonerror="true" maxmemory="2048m" classpathref="compile.path.id">
+      <sysproperty key="clojure.compile.path" value="${build.dir}" />
+      <arg value="com.zotoh.frwk.util.countrycode" />
+      <arg value="com.zotoh.blason.etc.apprunner" />
+    </java>
+  </target>
+
+  <target name="compile_and_jar">
+
+    <antcall target="compile_java" />
+    <antcall target="compile_clj" />
+
+
+    <!-- copy over other resources -->
+    <copy todir="${build.dir}">
+      <fileset dir="${src.dir}/java">
+        <exclude name="**/*.java"/>
+        <exclude name="**/.svn"/>
+      </fileset>
+      <fileset dir="${src.dir}/clj">
+        <exclude name="**/*.clj"/>
+        <exclude name="**/*.meta"/>
+        <exclude name="**/.svn"/>
+      </fileset>
+    </copy>
+
+    <jar destfile="${distrib.dir}/${PID}-${build.version}.jar" >
+      <fileset dir="${build.dir}">
+        <exclude name="**/log4j.properties"/>
+        <exclude name="**/logback.xml"/>
+        <exclude name="demo/**"/>
+      </fileset>
+    </jar>
+
+    <jar destfile="${distrib.dir}/demo.jar" >
+      <fileset dir="${build.dir}">
+        <include name="demo/**"/>
+      </fileset>
+    </jar>
+
+  </target>
+
+  <!--
+       compile test code
+       -->
+
+  <target name="compile_test_code" >
+    <mkdir dir="${report.test.dir}"/>
+    <mkdir dir="${build.test.dir}"/>
+
+
+    <copy todir="${build.test.dir}">
+      <fileset dir="${test.dir}/clj">
+        <exclude name="**/log4j.properties"/>
+        <exclude name="**/.svn"/>
+        <exclude name="**/*.clj"/>
+        <exclude name="**/*.java"/>
+      </fileset>
+    </copy>
+
+  </target>
+
+  <!--
+       run test code
+       -->
+
+  <target name="run_test_code" >
+
+  </target>
+
+
+  <!--
+       pack api and other docs
+       -->
+
+  <target name="pack_all_docs">
+    <mkdir dir="${pack.dir}/docs/api"/>
+    <copy todir="${pack.dir}/docs">
+      <fileset dir="${basedir}/docs" erroronmissingdir="false">
+        <exclude name="dummy.txt"/>
+        <exclude name=".svn"/>
+      </fileset>
+    </copy>
+  </target>
+
+
+  <!--
+       pack libraries
+       -->
+
+  <target name="pack_all_libs">
+    <copy todir="${pack.dir}/lib">
+      <fileset dir="${lib.dir}/libjar" >
+      </fileset>
+    </copy>
+  </target>
+
+  <!--
+       pack distro libs
+       -->
+
+  <target name="pack_all_dist">
+    <copy todir="${pack.dir}/dist">
+      <fileset dir="${distrib.dir}">
+        <exclude name="*-spec-*.jar"/>
+        <exclude name="demo.jar"/>
+      </fileset>
+    </copy>
+    <copy todir="${pack.dir}/boot">
+      <fileset dir="${distrib.dir}">
+        <include name="*-spec-*.jar"/>
+      </fileset>
+    </copy>
+  </target>
+
+  <!--
+       pack resources
+       -->
+
+  <target name="pack_resources">
+
+    <copy todir="${pack.dir}/blocks" flatten="true">
+      <fileset dir="${src.dir}/clj">
+        <include name="**/*.meta"/>
+      </fileset>
+    </copy>
+
+    <copy todir="${pack.dir}/etc">
+      <fileset dir="${basedir}/etc"/>
+    </copy>
+
+    <copy todir="${pack.dir}/conf">
+      <fileset dir="${basedir}/conf"/>
+    </copy>
+
+  </target>
+
+  <!--
+       pack scripts
+       -->
+
+  <target name="pack_bin_scripts">
+    <copy todir="${pack.dir}/bin" >
+      <fileset dir="${basedir}/bin" erroronmissingdir="false">
+        <exclude name=".svn"/>
+      </fileset>
+    </copy>
+    <chmod dir="${pack.dir}/bin" perm="755" includes="*"/>
+  </target>
+
+  <!--
+       pack license files
+       -->
+
+  <target name="pack_all_lics">
+    <copy todir="${pack.dir}/lics" >
+      <fileset dir="${basedir}/lics" erroronmissingdir="false">
+        <exclude name=".svn"/>
+      </fileset>
+    </copy>
+  </target>
+
+  <!--
+       pack source code
+       -->
+
+  <target name="pack_source_code" >
+    <copy todir="${pack.dir}/docs/src/main/clj">
+      <fileset dir="${src.dir}/clj" />
+    </copy>
+    <copy todir="${pack.dir}/docs/src/main/java">
+      <fileset dir="${src.dir}/java" />
+    </copy>
+  </target>
+
+  <!--
+       pack samples and/or demos
+       -->
+
+  <target name="pack_samples" >
+    <property name="demo.dir" value="${pack.dir}/docs/samples"/>
+    <for param="dir">
+      <path>
+        <dirset dir="${src.dir}/clj/com/zotoh/blason">
+          <include name="demo/*"/>
+        </dirset>
+      </path>
+      <sequential>
+        <var name="appid" value="" unset="true"/>
+        <basename property="appid" file="@{dir}"/>
+        <antcall target="create-demo-app"/>
+      </sequential>
+    </for>
+  </target>
+
+  <target name="create-demo-app">
+    <if><or>
+        <equals arg1="${appid}" arg2="jetty"/>
+        <equals arg1="${appid}" arg2="mvc"/></or>
+      <then>
+        <mkdir dir="${demo.dir}/${appid}/public/images"/>
+        <mkdir dir="${demo.dir}/${appid}/public/scripts"/>
+        <mkdir dir="${demo.dir}/${appid}/public/styles"/>
+        <copy todir="${demo.dir}/${appid}/public/images" file="${src.blason}/demo/favicon.ico"/>
+        <copy todir="${demo.dir}/${appid}/public/scripts" file="${src.blason}/demo/test.js"/>
+        <copy todir="${demo.dir}/${appid}/public/styles" file="${src.blason}/demo/main.css"/>
+      </then>
+    </if>
+    <if><equals arg1="${appid}" arg2="jetty"/>
+      <then>
+        <mkdir dir="${demo.dir}/${appid}/WEB-INF/classes"/>
+        <mkdir dir="${demo.dir}/${appid}/WEB-INF/lib"/>
+        <copy todir="${demo.dir}/${appid}/WEB-INF" file="${basedir}/etc/jetty/web.xml"/>
+      </then>
+    </if>
+    <mkdir dir="${demo.dir}/${appid}/POD-INF/classes"/>
+    <mkdir dir="${demo.dir}/${appid}/POD-INF/patch"/>
+    <mkdir dir="${demo.dir}/${appid}/POD-INF/lib"/>
+    <copy todir="${demo.dir}/${appid}/POD-INF/lib" file="${distrib.dir}/demo.jar"/>
+    <mkdir dir="${demo.dir}/${appid}/META-INF"/>
+    <echo message="" file="${demo.dir}/${appid}/META-INF/RELEASE-NOTES.txt"/>
+    <echo message="" file="${demo.dir}/${appid}/META-INF/NOTES.txt"/>
+    <echo message="" file="${demo.dir}/${appid}/META-INF/LICENSE.txt"/>
+    <echo message="" file="${demo.dir}/${appid}/META-INF/README.md"/>
+    <copy todir="${demo.dir}/${appid}/META-INF" file="${src.blason}/demo/MANIFEST.MF"/>
+    <replace file="${demo.dir}/${appid}/META-INF/MANIFEST.MF" token="@@@VER@@@" value="${build.version}"/>
+    <replace file="${demo.dir}/${appid}/META-INF/MANIFEST.MF" token="@@@ID@@@" value="${appid}"/>
+    <copy todir="${demo.dir}/${appid}/conf">
+      <fileset dir="${src.blason}/demo/${appid}">
+        <include name="*.conf"/>
+      </fileset>
+    </copy>
+    <copy todir="${demo.dir}/${appid}/conf" file="${basedir}/etc/app/app.conf"/>
+    <copy todir="${demo.dir}/${appid}/src/main/clj/demo/${appid}">
+      <fileset dir="${src.blason}/demo/${appid}">
+        <exclude name="**/env.conf"/>
+      </fileset>
+    </copy>
+    <mkdir dir="${demo.dir}/${appid}/docs"/>
+    <zip destfile="${demo.dir}/${appid}.pod"><fileset dir="${demo.dir}/${appid}"/></zip>
+    <delete dir="${demo.dir}/${appid}"/>
+  </target>
+
+  <!--
+       public TARGETS
+       -->
+
+
+  <target name="release" depends="common.pub-distro"/>
+  <target name="jar" depends="common.pub-jar"/>
+  <target name="test" depends="common.test-build"/>
+
+
+  <!--
+       housekeeping stuff
+       -->
+
+
+  <target name="clean4distro">
+    <delete dir="${ivy.lcache.dir}/com.zotoh/${ant.project.name}" quiet="true"/>
+    <delete dir="${ivy.lrepos.dir}/com.zotoh/${ant.project.name}" quiet="true"/>
+  </target>
+
+</project>
+
+
+

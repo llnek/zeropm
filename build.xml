@@ -1,0 +1,238 @@
+<project name="blason" basedir="." default="release" xmlns:ivy="antlib:org.apache.ivy.ant">
+
+  <property name="PID-DISTRO" value="${ant.project.name}-distro"/>
+  <property name="PID" value="${ant.project.name}"/>
+  <property file="build.properties" />
+  <include file="${basedir}/common.xml"/>
+
+  <!--
+       paths used for compilation and run  
+       -->
+
+  <path id="compile.path.id">
+    <fileset dir="${lib.dir}/libjar" />
+    <fileset dir="${clojure.dir}"/>
+    <path location="${build.dir}" />
+    <path location="${src.dir}/clojure" />
+  </path>
+
+  <path id="test.path.id">
+    <fileset dir="${lib.dir}/test" />
+    <fileset dir="${clojure.dir}" />
+    <path location="${build.dir}" />
+    <path location="${build.test.dir}" />
+  </path>
+
+  <!--
+       compile source code
+       -->
+
+  <target name="compile_java">
+    <javac sourcepath="" srcdir="${src.dir}/java" destdir="${build.dir}"
+      includeantruntime="false" excludes=""
+      debug="${build.debug}" debuglevel="lines,vars,source" classpathref="compile.path.id">
+      <compilerarg line="-Xlint:deprecation -Xlint:unchecked"/>
+      <include name="**/*.java"/>
+    </javac>
+  </target>
+
+  <target name="compile_clj">
+    <java classname="clojure.lang.Compile" fork="true" failonerror="true" maxmemory="2048m" classpathref="compile.path.id">
+      <sysproperty key="clojure.compile.path" value="${build.dir}" />
+      <arg value="com.zotoh.frwk.byteutils" />
+      <arg value="com.zotoh.frwk.cmdlineseq" />
+      <arg value="com.zotoh.frwk.constants" />
+      <arg value="com.zotoh.frwk.coreutils" />
+      <arg value="com.zotoh.frwk.countrycode" />
+      <arg value="com.zotoh.frwk.dateutils" />
+      <arg value="com.zotoh.frwk.fileutils" />
+      <arg value="com.zotoh.frwk.guid" />
+      <arg value="com.zotoh.frwk.i18n" />
+      <arg value="com.zotoh.frwk.ioutils" />
+      <arg value="com.zotoh.frwk.metautils" />
+      <arg value="com.zotoh.frwk.netutils" />
+      <arg value="com.zotoh.frwk.procutils" />
+      <arg value="com.zotoh.frwk.seqnumgen" />
+      <arg value="com.zotoh.frwk.strutils" />
+      <arg value="com.zotoh.frwk.usastate" />
+      <arg value="com.zotoh.frwk.win32ini" />
+      <arg value="com.zotoh.blason.etc.core" />
+    </java>
+  </target>
+
+  <target name="compile_and_jar">
+    <antcall target="compile_java" />
+    <antcall target="compile_clj" />
+    <!-- copy over other resources -->
+    <copy todir="${build.dir}">
+      <fileset dir="${src.dir}/java">
+        <exclude name="**/*.java"/>
+        <exclude name="**/.svn"/>
+      </fileset>
+      <fileset dir="${src.dir}/clojure">
+        <exclude name="**/*.clj"/>
+        <exclude name="**/.svn"/>
+      </fileset>
+    </copy>
+    <jar destfile="${distrib.dir}/${PID}-${build.version}.jar" >
+      <fileset dir="${build.dir}">
+        <exclude name="**/log4j.properties"/>
+        <exclude name="**/logback.xml"/>
+      </fileset>
+    </jar>
+  </target>
+
+  <!--
+       compile test code
+       -->
+
+  <target name="compile_test_code" >
+    <mkdir dir="${report.test.dir}"/>
+    <mkdir dir="${build.test.dir}"/>
+
+    <copy todir="${build.test.dir}">
+      <fileset dir="${test.dir}/clojure">
+        <exclude name="**/log4j.properties"/>
+        <exclude name="**/logback.xml"/>
+        <exclude name="**/.svn"/>
+        <exclude name="**/*.groovy"/>
+        <exclude name="**/*.scala"/>
+        <exclude name="**/*.java"/>
+        <exclude name="**/*.clj"/>
+      </fileset>
+    </copy>
+
+  </target>
+
+  <!--
+       run test code
+       -->
+
+  <target name="run_test_code" >
+
+  </target>
+
+
+  <!--
+       pack api and other docs
+       -->
+
+  <target name="pack_all_docs">
+    <mkdir dir="${pack.dir}/docs/api"/>
+    <copy todir="${pack.dir}/docs">
+      <fileset dir="${basedir}/docs" erroronmissingdir="false">
+        <exclude name="dummy.txt"/>
+        <exclude name=".svn"/>
+      </fileset>
+    </copy>
+  </target>
+
+
+  <!--
+       pack libraries
+       -->
+
+  <target name="pack_all_libs">
+    <copy todir="${pack.dir}/lib">
+      <fileset dir="${lib.dir}/libjar" >
+      </fileset>
+    </copy>
+  </target>
+
+  <!--
+       pack distro libs
+       -->
+
+  <target name="pack_all_dist">
+    <copy todir="${pack.dir}/dist">
+      <fileset dir="${distrib.dir}">
+      </fileset>
+    </copy>
+  </target>
+
+  <!--
+       pack resources
+       -->
+
+  <target name="pack_resources">
+
+    <copy todir="${pack.dir}/etc">
+      <fileset dir="${basedir}/etc"/>
+    </copy>
+
+    <copy todir="${pack.dir}/conf">
+      <fileset dir="${basedir}/conf"/>
+    </copy>
+
+  </target>
+
+  <!--
+       pack scripts
+       -->
+
+  <target name="pack_bin_scripts">
+    <copy todir="${pack.dir}/bin" >
+      <fileset dir="${basedir}/bin" erroronmissingdir="false">
+        <exclude name=".svn"/>
+      </fileset>
+    </copy>
+    <chmod dir="${pack.dir}/bin" perm="755" includes="*"/>
+  </target>
+
+  <!--
+       pack license files
+       -->
+
+  <target name="pack_all_lics">
+    <copy todir="${pack.dir}/lics" >
+      <fileset dir="${basedir}/lics" erroronmissingdir="false">
+        <exclude name=".svn"/>
+      </fileset>
+    </copy>
+  </target>
+
+  <!--
+       pack source code
+       -->
+
+  <target name="pack_source_code" >
+    <copy todir="${pack.dir}/docs/src/main/clojure">
+      <fileset dir="${src.dir}/clojure" />
+    </copy>
+    <copy todir="${pack.dir}/docs/src/main/java">
+      <fileset dir="${src.dir}/java" />
+    </copy>
+  </target>
+
+  <!--
+       pack samples and/or demos
+       -->
+
+  <target name="pack_samples" >
+  </target>
+
+
+  <!--
+       public TARGETS
+       -->
+
+
+  <target name="release" depends="common.pub-distro"/>
+  <target name="jar" depends="common.pub-jar"/>
+  <target name="test" depends="common.test-build"/>
+
+
+  <!--
+       housekeeping stuff
+       -->
+
+
+  <target name="clean4distro">
+    <delete dir="${ivy.lcache.dir}/com.zotoh/${ant.project.name}" quiet="true"/>
+    <delete dir="${ivy.lrepos.dir}/com.zotoh/${ant.project.name}" quiet="true"/>
+  </target>
+
+</project>
+
+
+
