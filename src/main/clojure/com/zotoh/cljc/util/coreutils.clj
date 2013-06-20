@@ -47,7 +47,7 @@
 
 (deftype NICHTS [])
 (def ^:dynamic *NICHTS* (->NICHTS ))
-
+  
 (defn nilToNichts
   "Returns null object to the internal NICHTS singleton."
   [obj]

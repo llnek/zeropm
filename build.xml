@@ -57,6 +57,7 @@
       <arg value="com.zotoh.cljc.i18n.i18nutils" />
       <arg value="com.zotoh.cljc.net.netutils" />
       <arg value="com.zotoh.cljc.netty.nettyio" />
+      <arg value="com.zotoh.cljc.crypto.cryptors" />
       <arg value="com.zotoh.blason.etc.core" />
     </java>
   </target>
