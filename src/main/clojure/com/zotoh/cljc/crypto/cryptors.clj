@@ -37,6 +37,7 @@
   (:import (org.bouncycastle.crypto.params DESedeParameters KeyParameter))
   (:import (org.apache.commons.lang3 StringUtils))
   (:require [ com.zotoh.cljc.util.coreutils :as CU])
+  (:require [ com.zotoh.cljc.util.strutils :as SU])
   )
 
 
@@ -256,6 +257,7 @@
 
 (defprotocol PasswordAPI
   (encoded [this] )
+  (toCharArray [this] )
   (text [this] ) )
 
 (defn- createXXX "" [len ^chars chArray]
@@ -276,15 +278,17 @@
 
 (deftype Password [pwdStr]
   Object
-  (hashCode [this] (.hashCode pwdStr))
   (equals [this obj] (and (instance? Password obj) (= (.pwdStr this) (.pwdStr obj))) )
+  (hashCode [this] (.hashCode (SU/nsb pwdStr)))
+  (toString [this] (.text this))
   PasswordAPI
+  (toCharArray [this] (if (nil? pwdStr) (char-array 0) (.toCharArray pwdStr)))
   (encoded [this]
     (if (StringUtils/isEmpty pwdStr)
       ""
       (let [ cr (JasyptCryptor.) s (.encrypt cr pwdStr) ]
         (str PWD_PFX s))))
-  (text [this] pwdStr))
+  (text [this] (SU/nsb pwdStr)))
 
 (defn createPassword
   ""
