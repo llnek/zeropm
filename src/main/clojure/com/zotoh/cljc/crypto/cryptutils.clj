@@ -368,6 +368,111 @@
       (let [ s (newSession user pwd) ]
         (if (nil? inp) (MimeMessage s) (MimeMessage s inp)))) )
 
+(defn is-signed? "" [obj]
+  (let [ inp (MM/maybe-stream obj) ]
+    (if (nil? inp)
+      (if (instance? Multipart obj)
+        (let [ m (cast Multipart obj) ] (MM/is-signed? (.getContentType mp)))
+        (throw (IOException. (str "Invalid content: " (CU/safeGetClzname obj)))))
+      (try
+        (is-signed? (.getContentType (newMimeMsg "" "" inp)))
+        (finally (IO/reset-stream! inp))))) )
+
+
+(defn is-compressed? "" [obj]
+  (let [ inp (MM/maybe-stream obj) ]
+    (if (nil? inp)
+      (cond
+        (instance? Multipart obj) (MM/is-compressed? (.getContentType (cast Multipart obj)))
+        (instance? BodyPart obj) (MM/is-compressed? (.getContentType (cast BodyPart obj)))
+        :else (throw (IOException. (str "Invalid content: " (CU/safeGetClzname obj)))))
+      (try
+        (MM/is-compressed? (.getContentType (newMimeMsg "" "" inp)))
+        (finally (IO/reset-stream! inp))))) )
+
+(defn is-encrypted? "" [obj]
+  (let [ inp (MM/maybe-stream obj) ]
+    (if (nil? inp)
+      (cond
+        (instance? Multipart obj)(MM/is-encrypted? (.getContentType mp))
+        (instance? BodyPart obj) (MM/is-encrypted? (.getContentType bp))
+        (throw (IOException. (str "Invalid content: " (CU/safeGetClzname obj)))))
+      (try
+        (MM/is-encrypted? (.getContentType (newMimeMsg "" "" inp)))
+        (finally (IO/reset-stream! inp))))))
+
+(defn charSet ""
+  ([cType]
+    (if (SU/hgl? cType)
+      (try
+        (MimeUtility/javaCharset (-> (ContentType. cType) (.getParameter "charset")))
+        (catch Throwable e (do (warn "" e) "")))
+      ""))
+  ([cType dft]
+    (let [ cs (charSet cType) ]
+      (if (SU/hgl? cs) cs (MimeUtility/javaCharset dft)))) )
+
+(defn smime-multipart-digsig "" [pkey certs algo mp]
+  (let [ mm (newMimeMsg "" "") ]
+    (.setContent mm mp)
+    (-> (make-signerGentor pkey certs algo) (.generate mm *BCProvider*))) )
+
+(defn smime-bodypart-digsig "" [pkey certs algo bp]
+  (-> (make-signerGentor pkey certs algo) (.generate (cast MimeBodyPart bp) *BCProvider*)))
+
+(defn smime-decrypt "" [pkey part]
+  (let [ cms (smime-dec pkey (SMIMEEnveloped. (cast MimeBodyPart part))) ]
+    (when (nil? cms)
+      (throw (GeneralSecurityException. "No matching decryption key")))
+    (IOUtils/toByteArray (.getContentStream cms))) )
+
+
+(defn smime-decryptAsStream "" [pkeys mimemsg]
+  (let [ ev (SMIMEEnveloped. mimemsg)
+         rc (some (fn [ k & _ ]
+                    (let [ cms (smime-dec k ev) ]
+                      (if (nil? cms) false (IOUtils/toByteArray (.getContentStream cms)))))
+              pkeys) ]
+    (when (nil? rc)
+      (throw (GeneralSecurityException. "No matching decryption key")))
+    rc))
+
+(defn peeksmime-signedContent "" [mp]
+  (->
+    (SMIMESignedParser. (BcDigestCalculatorProvider.)
+      (cast MimeMultipart mp)
+      (charSet (.getContentType mp) "binary")) (.getContent) (.getContent)) )
+
+(defn testsmime-digsig ""
+  ([mp certs] (testsmime-digsig mp certs ""))
+  ([mp certs cte]
+    (let [ mmp (cast MimeMultipart mp)
+           sc (if (SU/hgl? cte) (SMIMESigned. mmp cte) (SMIMESigned. mmp))
+           s (JcaCertStore. (list (seq certs)))
+           sns (-> (.getSignerInfos sc) (.getSigners) ) ]
+      (doseq [ i (seq sns) ]
+        (let [ si (cast SignerInformation i)
+               c (.getMatches s (.getSID si))
+               it (.iterator c)
+               rv (loop [ ret [] ]
+                    (if (not (.hasNext it))
+                      ret
+                      (let [ bdr (-> (JcaSimpleSignerInfoVerifierBuilder.) (.setProvider *BCProvider*)) ]
+                        (if (.verify si (.build bdr (cast X509CertificateHolder (.next it))))
+                          (let [ digest (.getContentDigest si) ]
+                            (if (nil? digest)
+                              (recur ret)
+                              (recur
+                                [ (-> (.getContentAsMimeMessage sc (newSession "" "")) (.getContent)) digest ] )))
+                          (recur ret))))) ]
+
+
+
+    throw new GeneralSecurityException("Failed to verify signature: no matching cert." )
+  }
+
+
+
 
 
 

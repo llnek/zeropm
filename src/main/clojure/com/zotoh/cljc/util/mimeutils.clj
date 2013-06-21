@@ -19,7 +19,7 @@
 ;;
 
 (ns ^{ :doc "This is a utility class that provides various MIME related functionality." :author "kenl" }
-  com.zotoh.cljc.crypto.cryptutils
+  com.zotoh.cljc.util.mimeutils
   (:use [clojure.tools.logging :only (info warn error debug)])
   (:import (org.apache.commons.lang3 StringUtils))
   (:import (java.net URLDecoder URLEncoder))
@@ -28,162 +28,160 @@
   (:import (java.util.regex Pattern))
   (:import (java.util Properties))
   (:import (javax.mail Message))
+  (:require [com.zotoh.cljc.util.strutils :as SU])
   )
 
-(defn getCharset "" [ct]
-    var pos = nsb(ct).indexOf("charset=")
-//    var rc= "ISO-8859-1"
-    var rc="utf-8"
-    if (pos > 0) {
-      val s = ct.substring(pos+8)
-      pos = STU.indexOfAny(s, "; \t\r\n")
-      if (pos > 0) {
-        rc=s.substring(0, pos)
-      }
-    }
-    rc
-  }
-  
-  /**
-   * @param cType
-   * @return
-   */
-  def isSigned(cType:String) = {
-    val ct= nsb(cType).lc
-    //tlog().debug("MimeUte:isSigned: ctype={}", cType)
-    ( ct.indexOf("multipart/signed") >=0 ) ||
-          (isPKCS7mime(ct) && (ct.indexOf("signed-data") >=0) )
-  }
+(def ^:dynamic *CTE_QUOTED* "quoted-printable")
+(def ^:dynamic *CTE_7BIT* "7bit")
+(def ^:dynamic *CTE_8BIT* "8bit")
+(def ^:dynamic *CTE_BINARY* "binary")
+(def ^:dynamic *CTE_BASE64* "base64")
 
-  /**
-   * @param cType
-   * @return
-   */
-  def isEncrypted(cType:String) = {
-    val ct= nsb(cType).lc
-    //tlog().debug("MimeUte:isEncrypted: ctype={}", cType);
-    (isPKCS7mime(ct)  &&  (ct.indexOf("enveloped-data") >= 0) )
-  }
+(def ^:dynamic *MIME_USER_PROP*  "mime.rfc2822.user")
+(def ^:dynamic *MIME_USER_JAVAMAIL*   "javamail")
+(def ^:dynamic *DEF_USER*  "popeye")
+(def ^:dynamic *MIME_USER_PREFIX*   "zotoh")
+(def ^:dynamic *DEF_HOST*  "localhost")
+(def ^:dynamic *MIME_HEADER_MSGID*  "Message-ID")
+(def ^:dynamic *MIME_MULTIPART_BOUNDARY*  "boundary")
+(def ^:dynamic *DOT*   ".")
+(def ^:dynamic *AT*  "@")
+(def ^:dynamic *CH_DOT*   \. )
+(def ^:dynamic *CH_AT*  \@)
+(def ^:dynamic *STR_LT*   "<")
+(def ^:dynamic *STR_GT*  ">")
+(def ^:dynamic *ALL*   -1)
+(def ^:dynamic *ALL_ASCII*   1)
+(def ^:dynamic *MOSTLY_ASCII*   2)
+(def ^:dynamic *MOSTLY_NONASCII*   3)
 
-  /**
-   * @param cType
-   * @return
-   */
-  def isCompressed(cType:String) = {
-    val ct= nsb(cType).lc
-    //tlog().debug("MimeUte:isCompressed: ctype={}", cType);
-    (ct.indexOf("application/pkcs7-mime") >= 0 ) &&
-        (ct.indexOf("compressed-data") >= 0 )
-  }
+;; Capitalized MIME constants to use when generating MIME headers)
+;; for messages to be transmitted.)
+(def ^:dynamic *AS2_VER_ID*    "1.1")
+(def ^:dynamic *UA*  "user-agent")
+(def ^:dynamic *TO*   "to")
+(def ^:dynamic *FROM*  "from")
+(def ^:dynamic *AS2_VERSION*    "as2-version")
+(def ^:dynamic *AS2_TO*   "as2-to")
+(def ^:dynamic *AS2_FROM*  "as2-from")
+(def ^:dynamic *SUBJECT*    "subject")
+(def ^:dynamic *CONTENT_TYPE*  "content-type")
+(def ^:dynamic *CONTENT*     "content")
+(def ^:dynamic *CONTENT_NAME*   "content-name")
+(def ^:dynamic *CONTENT_LENGTH*  "content-length")
+(def ^:dynamic *CONTENT_LOC*  "content-Location")
+(def ^:dynamic *CONTENT_ID*    "content-id")
+(def ^:dynamic *CONTENT_TRANSFER_ENCODING*  "content-transfer-encoding")
+(def ^:dynamic *CONTENT_DISPOSITION*   "content-disposition")
+(def ^:dynamic *DISPOSITION_NOTIFICATION_TO*  "disposition-notification-to")
+(def ^:dynamic *DISPOSITION_NOTIFICATION_OPTIONS*  "disposition-notification-options")
+(def ^:dynamic *SIGNED_REC_MICALG* "signed-receipt-micalg")
+(def ^:dynamic *MESSAGE_ID*   "message-id")
+(def ^:dynamic *ORIGINAL_MESSAGE_ID*   "original-message-id")
+(def ^:dynamic *RECEIPT_DELIVERY_OPTION*   "receipt-delivery-option")
+(def ^:dynamic *DISPOSITION*  "disposition")
+(def ^:dynamic *DATE*    "date")
+(def ^:dynamic *MIME_VERSION*   "mime-version")
+(def ^:dynamic *FINAL_RECIPIENT*   "final-recipient")
+(def ^:dynamic *ORIGINAL_RECIPIENT*   "original-recipient")
+(def ^:dynamic *RECV_CONTENT_MIC*   "received-content-mic")
 
-  /**
-   * @param cType
-   * @return
-   */
-  def isMDN(cType:String) = {
-    val ct= nsb(cType).lc
-    //tlog().debug("MimeUte:isMDN: ctype={}", cType);
-    (ct.indexOf("multipart/report") >=0) &&
-        (ct.indexOf("disposition-notification") >= 0)
-  }
+(def ^:dynamic *RFC822* "rfc822")
+(def ^:dynamic *RFC822_PFX* (str *RFC822* "; "))
 
-  /**
-   * @param obj
-   * @return
-   * @throws Exception
-   */
-  def maybeAsStream(obj:Any) = {
-    obj match {
-      case b:Array[Byte] =>  asStream(b)
-      case i:InputStream =>  i
-      case s:String =>  asStream(asBytes(s))
-      case _ => null
-    }
-  }
+(def ^:dynamic *APP_XML* "application/xml")
+(def ^:dynamic *TEXT_PLAIN* "text/plain")
+(def ^:dynamic *APP_OCTET* "application/octet-stream")
+(def ^:dynamic *PKCS7SIG* "pkcs7-signature")
+(def ^:dynamic *TEXT_HTML* "text/html")
+(def ^:dynamic *TEXT_XML* "text/xml")
+(def ^:dynamic *MSG_DISP* "message/disposition-notification")
 
-  /**
-   * @param u
-   * @return
-   */
-  def urlDecode(u:String) = {
-    if (u==null) null else try {
-      URLDecoder.decode(u, "UTF-8")
-    } catch {
-      case e:Throwable => null
-    }
-  }
+(def ^:dynamic *ERROR*   "error")
+(def ^:dynamic *FAILURE* "failure")
+(def ^:dynamic *WARNING*  "warning")
+(def ^:dynamic *HEADERS*  "headers")
 
-  /**
-   * @param u
-   * @return
-   */
-  def urlEncode(u:String) = {
-    if (u==null) null else try {
-      URLEncoder.encode(u, "UTF-8")
-    } catch {
-      case e:Throwable => null
-    }
-  }
+(def ^:dynamic *ISO_8859_1* "iso-8859-1")
+(def ^:dynamic *US_ASCII* "us-ascii")
 
-  private def isPKCS7mime(s:String) = {
-    (s.indexOf("application/pkcs7-mime") >=0) ||
-      (s.indexOf("application/x-pkcs7-mime") >=0)
-  }
+(def ^:dynamic *CRLF* "\r\n")
 
-  def guessMimeType(file:File, dft:String = "" ) = {
-    val matcher = _extRegex.matcher( file.getName().lc)
-    val ext = if (matcher.matches()) {
-      matcher.group(1)
-    } else { 
-      "" 
-    }
 
-    mimeCache().getProperty(ext) match {
-      case s:String if !STU.isEmpty(s) => s
-      case _ => dft
-    }
+(def ^:private _extRegex (Pattern/compile "^.*\\.([^.]+)$"))
+(def ^:private _mime_cache (atom (Properties.)))
 
-  }
+(defn- is-pkcs7mime "" [s] (>= (.indexOf s "application/x-pkcs7-mime") 0))
+(defn- mime-cache "" [] @_mime_cache)
 
-  def guessContentType(file:File, enc:String="utf-8", dft:String = "application/octet-stream" ) = {
-    val ct = guessMimeType(file, "") match {
-      case s:String if !STU.isEmpty(s) => s
-      case _ => dft
-    }
-    if (! ct.startsWith("text/")) ct else {
-      ct + "; charset=" + enc
-    }
-  }
+(defn get-charset "" [cType]
+  (let [ pos (-> (SU/nsb cType) (.toLowerCase) (.indexOf "charset="))
+       ;;rc "ISO-8859-1"
+         rc "utf-8" ]
+    (if (> pos 0)
+      (let [ s (.substring cType (+ pos 8)) p (StringUtils/indexOfAny s "; \t\r\n") ]
+        (if (> pos 0) (.substring s 0 p) rc))
+      rc)) )
 
-  def test(mimeType:String ) = {
-    mimeCache().contains( nsb(mimeType).split( ";") )
-  }
+(defn is-signed? "" [cType]
+  (let [ ct (.toLowerCase (SU/nsb cType)) ]
+    (or (>= (.indexOf ct "multipart/signed") 0)
+        (and (is-pkcs7mime? ct) (>= (.indexOf ct "signed-data") 0)))) )
 
-  def mimeCache() = {
-   _mimeCache 
-  }
+(defn is-encrypted? "" [cType]
+  (let [ ct (.toLowerCase (SU/nsb cType)) ]
+    (and (is-pkcs7mime? ct) (>= (.indexOf ct "enveloped-data") 0))) )
 
-  def setupCache(file:URL) {
-    _mimeCache = using(file.openStream ) { (inp) =>
-      asQuirks(inp)      
-    }
-  }
+(defn is-compressed? "" [cType]
+  (let [ ct (.toLowerCase (SU/nsb cType)) ]
+    (and (>= (.indexOf ct "application/pkcs7-mime") 0) (>= (.indexOf ct "compressed-data") 0))) )
 
-  private val _extRegex = Pattern.compile("^.*\\.([^.]+)$")
-  private var _mimeCache:JPS = null
-  
-}
+(defn is-mdn? "" [cType]
+  (let [ ct (.toLowerCase (SU/nsb cType)) ]
+    (and (>= (.indexOf ct "multipart/report") 0) (>= (.indexOf ct "disposition-notification") 0))) )
 
-sealed class MimeUtils {}
+(defn maybe-stream "" [obj]
+  (cond
+    (instance? String obj) (IO/toStream (CU/getBytes (cast String obj)))
+    (instance? InputStream obj) (cast InputStream obj)
+    (instance? bytes obj) (IO/toStream (cast bytes obj))
+    :else nil))
 
-trait Email {
+(defn url-decode "" [u]
+  (if (nil? u)
+    nil
+    (try
+      (URLDecoder/decode u "utf-8")
+      (catch Throwable e nil))))
 
-  def addRecipient(fld:Message.RecipientType, addrs:String ): Unit
-  def attach(fp:File ): Unit
-  def send(body:String , contentType:String, subType:String) : Unit
-  def send(body:String ) : Unit
+(defn url-encode "" [u]
+  (if (nil? u)
+    nil
+    (try
+      (URLEncoder/encode u "utf-8")
+      (catch Throwable e nil))))
 
-}
+(defn guess-mimetype ""
+  ([file] (guess-mimetype file ""))
+  ([file dft]
+    (let [ mc (.matcher _extRegex (.toLowerCase (.getName file)))
+           ex (if (.matches mc) (.group mc 1) "")
+           p (SU/nsb (.getProperty (mime-cache) ex)) ]
+      (if (SU/hgl? p) p dft))) )
+
+(defn guess-contenttype ""
+  ([file] (guess-contenttype file "utf-8" "application/octet-stream" ))
+  ([file enc dft]
+    (let [ mt (guess-mimetype file)
+           ct (if (SU/hgl? mt) mt dft) ]
+      (if (not (.startsWith ct "text/")) ct (str ct "; charset=" enc)))) )
+
+(defn setup-cache "" [fileUrl]
+  (with-open [ inp (.openStream fileUrl) ]
+    (let [ ps (Properties.) ]
+      (.load ps inp)
+      (swap! _mime_cache ps))))
+
 
 
 
