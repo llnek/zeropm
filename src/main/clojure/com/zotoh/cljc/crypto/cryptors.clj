@@ -24,22 +24,22 @@
   (:require [clojure.math.numeric-tower :as math])  
   (:import (org.apache.commons.codec.binary Base64))
   (:import (javax.crypto.spec SecretKeySpec))
-  (:import (org.jasypt.util.text StrongTextEncryptor))
   (:import (org.jasypt.encryption.pbe StandardPBEStringEncryptor))
-  (:import (javax.crypto Cipher))
+  (:import (org.jasypt.util.text StrongTextEncryptor))
   (:import (java.io ByteArrayOutputStream))
   (:import (java.security SecureRandom))
+  (:import (javax.crypto Cipher))
+  (:import (org.bouncycastle.crypto.params DESedeParameters KeyParameter))
+  (:import (org.bouncycastle.crypto.paddings PaddedBufferedBlockCipher))
   (:import (org.bouncycastle.crypto KeyGenerationParameters))
   (:import (org.bouncycastle.crypto.engines DESedeEngine))
   (:import (org.bouncycastle.crypto.generators DESedeKeyGenerator))
   (:import (org.bouncycastle.crypto.modes CBCBlockCipher))
-  (:import (org.bouncycastle.crypto.paddings PaddedBufferedBlockCipher))
-  (:import (org.bouncycastle.crypto.params DESedeParameters KeyParameter))
   (:import (org.apache.commons.lang3 StringUtils))
   (:require [ com.zotoh.cljc.util.coreutils :as CU])
+  (:require [ com.zotoh.cljc.util.ioutils :as IO])
   (:require [ com.zotoh.cljc.util.strutils :as SU])
   )
-
 
 ;;(def ^:private PCHS "abcdefghijklmnopqrstuvqxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`1234567890-_~!@#$%^&*()" )
 (def ^:private PCHS "Ha$4Jep8!`g)GYkmrIRN72^cObZ%oXlSPT39qLMD&iC*UxKWhE#F5@qvV6j0f1dyBs-~tAQn(z_u" )
@@ -51,19 +51,21 @@
 (def ^:private PWD_PFX "CRYPT:" )
 (def ^:private PWD_PFXLEN (.length PWD_PFX))
 
-(def ^:private C_KEY "ed8xwl2XukYfdgR2aAddrg0lqzQjFhbs" )
 (def ^:private T3_DES "TripleDES" ) ;; AES/ECB/PKCS5Padding/TripleDES
+(def ^:private C_KEY "ed8xwl2XukYfdgR2aAddrg0lqzQjFhbs" )
 (def ^:private C_ALGO T3_DES) ;; default javax supports this
-(defn- ensure-key-size "" [keystr algo]
-  (let [ len (alength (.getBytes keystr "utf-8")) ]
+
+(defn- ensure-key-size [keystr algo]
+  (let [ len (alength (CU/bytesify keystr)) ]
     (when (and (= T3_DES algo) (< len 24))
-      (CU/errBadArg "Encryption key length must be 24, when using TripleDES"))
+      (CU/throw-badarg "Encryption key length must be 24, when using TripleDES"))
     keystr))
+
 (def ^:private DFTKEY (ensure-key-size C_KEY C_ALGO))
 (def ^:private ALPHA_CHS 26)
 
-(defn- keyAsBits "" [pwd algo]
-  (let [ bits (.getBytes pwd "utf-8") ]
+(defn- keyAsBits [pwd algo]
+  (let [ bits (CU/bytesify pwd) ]
     (if (and (= T3_DES algo) (> (alength bits) 24))
       (into-array Byte/TYPE (take 24 bits)) ;; only 24 bits wanted
       bits)))
@@ -90,17 +92,18 @@
       (char (+ ch width))
       (char ch))) )
 
-(defn- shift-enc "" [shiftpos delta ch headch tailch]
+(defn- shift-enc [shiftpos delta ch headch tailch]
   (if (> shiftpos 0)
     (shiftRight ALPHA_CHS delta (int ch) (int headch) (int tailch))
     (shiftLeft ALPHA_CHS delta (int ch) (int headch) (int tailch))) )
 
-(defn- shift-dec "" [shiftpos delta ch headch tailch]
+(defn- shift-dec [shiftpos delta ch headch tailch]
   (if (< shiftpos 0)
     (shiftRight ALPHA_CHS delta (int ch) (int headch)  (int tailch))
     (shiftLeft ALPHA_CHS delta  (int ch)  (int headch)  (int tailch)) ))
 
-(defn caesarEncode "" [text shiftpos]
+(defn caesarEncode ^{ :doc "" }
+  [text shiftpos]
   (if (or (= shiftpos 0) (StringUtils/isEmpty text))
     text
     (let [ delta (mod (math/abs shiftpos) ALPHA_CHS)
@@ -115,7 +118,8 @@
                       :else ch))) ]
       (String. out))) )
 
-(defn caesarDecode "" [text shiftpos]
+(defn caesarDecode ^{ :doc "" }
+  [text shiftpos]
   (if (or (= shiftpos 0) (StringUtils/isEmpty text))
     text
     (let [ delta (mod (math/abs shiftpos) ALPHA_CHS)
@@ -132,12 +136,12 @@
 ;; jasypt cryptor
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- jaDecr "" [pwd text]
+(defn- jaDecr [pwd text]
   (let [ ec (StrongTextEncryptor.) ]
     (.setPassword ec pwd)
     (.decrypt ec text)) )
 
-(defn- jaEncr "" [pwd text]
+(defn- jaEncr [pwd text]
   (let [ ec (StrongTextEncryptor.) ]
     (.setPassword ec pwd)
     (.encrypt ec text)) )
@@ -146,12 +150,10 @@
   (decrypt [this cipherText] (.decrypt this DFTKEY cipherText))
   (decrypt [this pwdStr cipherText]
     (do
-      ;;(ensure-key-size pwdStr (.algo this))
       (jaDecr pwdStr cipherText)) )
   (encrypt [this clearText] (.encrypt this DFTKEY clearText))
   (encrypt [this pwdStr clearText]
     (do
-      ;;(ensure-key-size pwdStr (.algo this))
       (jaEncr pwdStr clearText)) )
   (algo [this] "PBEWithMD5AndTripleDES") )
 
@@ -159,18 +161,18 @@
 ;; java cryptor
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- getCipher "" [pwd mode algo]
+(defn- getCipher [pwd mode algo]
   (let [ spec (SecretKeySpec. (keyAsBits pwd algo) algo)
          c (Cipher/getInstance algo) ]
     (.init c mode spec)
     c))
 
-(defn- jcEncr "" [pwd text algo]
+(defn- jcEncr [pwd text algo]
   (if (StringUtils/isEmpty text)
     text
     (let [ c (getCipher pwd (Cipher/ENCRYPT_MODE) algo )
-           baos (ByteArrayOutputStream.)
-           p (.getBytes text "utf-8")
+           baos (IO/make-baos)
+           p (CU/bytesify text)
            out (byte-array (max 4096 (.getOutputSize c (alength p))))
            n (.update c p 0 (alength p) out 0) ]
       (when (> n 0) (.write baos out 0 n))
@@ -178,18 +180,18 @@
         (when (> n2 0) (.write baos out 0 n2)))
       (Base64/encodeBase64URLSafeString (.toByteArray baos)))) )
 
-(defn- jcDecr "" [pwd encoded algo]
+(defn- jcDecr [pwd encoded algo]
   (if (StringUtils/isEmpty encoded)
     encoded
     (let [ c (getCipher pwd (Cipher/DECRYPT_MODE) algo )
-           baos (ByteArrayOutputStream.)
+           baos (ByteArrayOutputStream. (int 4096))
            p (Base64/decodeBase64 encoded)
            out (byte-array (max 4096 (.getOutputSize c (alength p))))
            n (.update c p 0 (alength p) out 0) ]
       (when (> n 0) (.write baos out 0 n))
       (let [ n2 (.doFinal c out 0) ]
         (when (> n2 0) (.write baos out 0 n2)))
-      (String. (.toByteArray baos) "utf-8"))) )
+      (CU/stringify (.toByteArray baos)))) )
 
 (deftype JavaCryptor [] BaseCryptor
   (decrypt [this cipherText] (.decrypt this (.pkey this) cipherText))
@@ -208,29 +210,29 @@
 ;; BC cryptor
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- bcDecr "" [pwd text algo]
+(defn- bcDecr [pwd text algo]
   (if (StringUtils/isEmpty text)
     text
     (let [ cipher (PaddedBufferedBlockCipher. (CBCBlockCipher. (DESedeEngine.)))
            dummy (.init cipher false (KeyParameter. (keyAsBits pwd algo)))
            p (Base64/decodeBase64 text)
            out (byte-array 1024)
-           baos (ByteArrayOutputStream. (int 4096))
+           baos (IO/make-baos)
            c (.processBytes cipher p 0 (alength p) out 0) ]
       (when (> c 0) (.write baos out 0 c))
       (let [ c2 (.doFinal cipher out 0) ]
         (when (> c2 0) (.write baos out 0 c2)))
-      (String. (.toByteArray baos) "utf-8"))) )
+      (CU/stringify (.toByteArray baos)))) )
 
-(defn- bcEncr "" [pwd text algo]
+(defn- bcEncr [pwd text algo]
   (if (StringUtils/isEmpty text)
     text
     (let [ cipher (PaddedBufferedBlockCipher. (CBCBlockCipher. (DESedeEngine.)))
           ;; init the cipher with the key, for encryption
            dummy (.init cipher true (KeyParameter. (keyAsBits pwd algo)))
            out (byte-array 4096)
-           baos (ByteArrayOutputStream. (int 4096))
-           p (.getBytes text "utf-8")
+           baos (IO/make-baos)
+           p (CU/bytesify text)
            c (.processBytes cipher p 0 (alength p) out 0) ]
       (when (> c 0) (.write baos out 0 c))
       (let [ c2 (.doFinal cipher out 0) ]
@@ -260,7 +262,7 @@
   (toCharArray [this] )
   (text [this] ) )
 
-(defn- createXXX "" [len ^chars chArray]
+(defn- createXXX [len ^chars chArray]
   (cond
     (< len 0) nil
     (= len 0) ""
@@ -290,8 +292,7 @@
         (str PWD_PFX s))))
   (text [this] (SU/nsb pwdStr)))
 
-(defn createPassword
-  ""
+(defn createPassword ^{ :doc "Create a password object." }
   [pwdStr]
   (cond
     (StringUtils/isEmpty pwdStr) (Password. "")

@@ -28,22 +28,19 @@
   (:require [ com.zotoh.cljc.util.strutils :as SU])
   )
 
-(defn getPropertyResourceBundle
-  "Load a properties file containing localized string."
+(defn load-resbundle ^{ :doc "Load a properties file containing localized string." }
   [aFile]
   (do
     (with-open [ inp (FileInputStream. aFile) ]
       (PropertyResourceBundle. inp))) )
 
-(defn getResourceBundle
-  "Return a resource bundle."
+(defn get-resbundle ^{ :doc "Return a resource bundle." }
   [baseName locale cl]
   (if (or (nil? baseName)(nil? locale))
     nil
-    (ResourceBundle/getBundle baseName locale (MU/getCZldr cl))) )
+    (ResourceBundle/getBundle baseName locale (MU/get-cldr cl))) )
 
-(defn getString
-  "Return the string value for this key, pms may contain values for positional substitutions."
+(defn get-string ^{ :doc "Return the string value for this key, pms may contain values for positional substitutions." }
   [bundle pkey pms]
   (let [ kv (SU/nsb (.getString bundle pkey)) ]
     (if (empty? pms)

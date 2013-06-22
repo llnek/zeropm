@@ -28,7 +28,9 @@
   (:import (java.util.regex Pattern))
   (:import (java.util Properties))
   (:import (javax.mail Message))
+  (:require [com.zotoh.cljc.util.coreutils :as CU])
   (:require [com.zotoh.cljc.util.strutils :as SU])
+  (:require [com.zotoh.cljc.util.ioutils :as IO])
   )
 
 (def ^:dynamic *CTE_QUOTED* "quoted-printable")
@@ -111,7 +113,7 @@
 (def ^:private _extRegex (Pattern/compile "^.*\\.([^.]+)$"))
 (def ^:private _mime_cache (atom (Properties.)))
 
-(defn- is-pkcs7mime "" [s] (>= (.indexOf s "application/x-pkcs7-mime") 0))
+(defn- is-pkcs7mime? "" [s] (>= (.indexOf s "application/x-pkcs7-mime") 0))
 (defn- mime-cache "" [] @_mime_cache)
 
 (defn get-charset ^{ :doc "Get charset from this content-type string." }
@@ -124,23 +126,23 @@
         (if (> pos 0) (.substring s 0 p) rc))
       rc)) )
 
-(defn is-signed? { ^:doc "Returns true if this content-type indicates signed." }
+(defn is-signed? ^{ :doc "Returns true if this content-type indicates signed." }
   [cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (or (>= (.indexOf ct "multipart/signed") 0)
         (and (is-pkcs7mime? ct) (>= (.indexOf ct "signed-data") 0)))) )
 
-(defn is-encrypted? { ^:doc "Returns true if this content-type indicates encrypted." }
+(defn is-encrypted? ^{ :doc "Returns true if this content-type indicates encrypted." }
   [cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (and (is-pkcs7mime? ct) (>= (.indexOf ct "enveloped-data") 0))) )
 
-(defn is-compressed? { ^:doc "Returns true if this content-type indicates compressed." }
+(defn is-compressed? ^{ :doc "Returns true if this content-type indicates compressed." }
   [cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (and (>= (.indexOf ct "application/pkcs7-mime") 0) (>= (.indexOf ct "compressed-data") 0))) )
 
-(defn is-mdn? { ^:doc "Returns true if this content-type indicates MDN." }
+(defn is-mdn? ^{ :doc "Returns true if this content-type indicates MDN." }
   [cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (and (>= (.indexOf ct "multipart/report") 0) (>= (.indexOf ct "disposition-notification") 0))) )
