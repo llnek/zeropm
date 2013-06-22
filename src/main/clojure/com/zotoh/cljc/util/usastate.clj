@@ -76,24 +76,18 @@
 
 (def ^:private _CCODESEQ (seq _CCODES))
 
-
-(defn listStateCodes
-  "List all the abbreviated states."
+(defn list-codes ^{ :doc "List all the abbreviated states." }
   []
   (keys _CCODES))
 
-(defn findState
-  "Return the full state name."
+(defn find-state ^{ :doc "Return the full state name." }
   [code]
   (_CCODES (.toUpperCase code)))
 
-(defn findCode
-  "Return the abbreviated state code."
+(defn find-code ^{ :doc "Return the abbreviated state code." }
   [state]
   (let [ rs (filter #(= (nth % 1) state) _CCODESEQ) ]
       (if (nil? rs) nil (nth (first rs) 0))))
-
-
 
 
 (def ^:private usastate-eof nil)

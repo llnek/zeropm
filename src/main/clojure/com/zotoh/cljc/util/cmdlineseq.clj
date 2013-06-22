@@ -29,7 +29,7 @@
   (:require [ com.zotoh.cljc.util.strutils :as SU])
   )
 
-(defrecord CmdSeqQ [ qid qline choices dft must onok ])
+(defrecord CmdSeqQ [qid qline choices dft must onok] )
 
 (defn- readData [cout cin]
   (let [ buf (StringBuilder.)
@@ -75,7 +75,7 @@
     (popQQ cout cin cmdQ props)) )
 
 (defn- cycleQ [cout cin cmdQNs start props]
-  (let []
+  (do
     (loop [ rc (popQ cout cin (get cmdQNs start) props) ]
       (cond
         (StringUtils/isEmpty rc) props
@@ -83,7 +83,7 @@
         :else (recur (popQ cout cin (get cmdQNs rc) props))))))
 
 (defn converse [cmdQs q1]
-  (let [ kp (if (CU/isWindows?) "<Ctrl-C>" "<Ctrl-D>")
+  (let [ kp (if (CU/is-windows?) "<Ctrl-C>" "<Ctrl-D>")
          cout (OutputStreamWriter. (BufferedOutputStream. (System/out)))
          cin (InputStreamReader. (System/in))
          props (Properties.) ]

@@ -37,31 +37,27 @@
 (def ^:private HEX_CHS [ \0 \1 \2 \3 \4 \5 \6 \7 \8 \9 \A \B \C \D \E \F ])
 (def ^:private SZ_10MEG (* 1024 1024 10))
 
-(defn mkTempFile
-  "Create a temp file in the temp dir."
-  ([] (mkTempFile "" ""))
+(defn make-tmpfile ^{ :doc "Create a temp file in the temp dir." }
+  ([] (make-tmpfile "" ""))
   ([pfx sux]
     (File/createTempFile
-      (if (StringUtils/isEmpty pfx) "temp-" pfx)
+      (if (StringUtils/isEmpty pfx) "tmp-" pfx)
       (if (StringUtils/isEmpty sux) ".dat" sux)
       (com.zotoh.frwk.io.IOUtils/workDir)) ))
 
-(defn newTempFile
-  "Create a new temp file, optionally open it for write as stream."
-  ([] (newTempFile false))
+(defn newly-tmpfile ^{ :doc "Create a new temp file, optionally open it for write as stream." }
+  ([] (newly-tmpfile false))
   ([open]
-    (let [ f (mkTempFile) ]
+    (let [ f (make-tmpfile) ]
       (if open [ f (FileOutputStream. f) ] [ f nil ]))) )
 
-(defn toStream
-  "Wrapped these bytes in an input-stream."
+(defn streamify ^{ :doc "Wrapped these bytes in an input-stream." }
   [bits]
   (if (nil? bits)
     nil
     (ByteArrayInputStream. bits)) )
 
-(defn bytesToHexChars
-  "Turn bytes into hex chars."
+(defn hexify-chars ^{ :doc "Turn bytes into hex chars." }
   [bits]
   (let [ len (* 2 (if (nil? bits) 0 (alength bits)))
          out (char-array len) ]
@@ -75,13 +71,11 @@
             (recur (inc k) (+ 2 pos)) ))))
     out))
 
-(defn bytesToHexString
-  "Turn bytes into hex string."
+(defn hexify-string ^{ :doc "Turn bytes into hex string." }
   [bits]
-  (if (nil? bits) nil (String. (bytesToHexChars  bits))) )
+  (if (nil? bits) nil (String. (hexify-chars bits))) )
 
-(defn gzip
-  "Gzip these bytes."
+(defn gzip ^{ :doc "Gzip these bytes." }
   [bits]
   (let [ baos (ByteArrayOutputStream. (int 4096)) ]
     (when (nil? bits) nil)
@@ -89,61 +83,53 @@
           (.write g bits, 0, (alength bits)))
     (.toByteArray baos)) )
 
-(defn gunzip
-  "Gunzip these bytes."
+(defn gunzip ^{ :doc "Gunzip these bytes." }
   [bits]
   (if (nil? bits)
     nil
-    (IOUtils/toByteArray (GZIPInputStream. (toStream bits))) ))
+    (IOUtils/toByteArray (GZIPInputStream. (streamify bits))) ))
 
-(defn reset-stream!
-  "Call reset on this input stream."
+(defn reset-stream! ^{ :doc "Call reset on this input stream." }
   [inp]
   (try
     (if-not (nil? inp)  (.reset inp))
     (catch Throwable t nil)) )
 
-(defmulti openFile class)
+(defmulti ^{ :doc "Open this file path." } open-file class)
 
-(defmethod ^{ :doc "Open this file path." } openFile String
+(defmethod open-file String
   [ ^String fp]
   (if (nil? fp) nil (XStream. (File. fp))))
 
-(defmethod ^{ :doc "Open this file." } openFile File
+(defmethod open-file File
   [^File f]
   (if (nil? f) nil (XStream. f)))
 
-(defn fromGZipedB64
-  "Unzip content which is base64 encoded + gziped."
+(defn from-gzb64 ^{ :doc "Unzip content which is base64 encoded + gziped." }
   [gzb64]
   (if (nil? gzb64) nil (gunzip (Base64/decodeBase64 gzb64))) )
 
-(defn toGZipedB64
-  "Zip content and then base64 encode it."
+(defn to-gzb64  ^{ :doc "Zip content and then base64 encode it." }
   [bits]
   (if (nil? bits) nil (Base64/encodeBase64String (gzip bits))) )
 
-(defn available
-  "Get the available bytes in this stream."
+(defn available ^{ :doc "Get the available bytes in this stream." }
   [inp]
   (if (nil? inp) 0 (.available inp)) )
 
-(defn copyStreamToFile
-  "Copy content from this input-stream to a temp file."
+(defn copy-stream ^{ :doc "Copy content from this input-stream to a temp file." }
   [inp]
-  (let [ t (newTempFile true) ]
+  (let [ t (newly-tmpfile true) ]
     (with-open [ os (nth t 1) ]
       (IOUtils/copy inp os))
     (nth t 0)))
 
-(defn copyCountedBytes
-  "Copy x number of bytes from the source input-stream."
+(defn copy-bytes ^{ :doc "Copy x number of bytes from the source input-stream." }
   [src out bytesToCopy]
   (when-not (<= bytesToCopy 0)
     (IOUtils/copyLarge src out 0 bytesToCopy)) )
 
-(defn reset-source!
-  "Reset an input source."
+(defn reset-source! ^{ :doc "Reset an input source." }
   [inpsrc]
   (if-not (nil? inpsrc)
     (let [ rdr (.getCharacterStream inpsrc)
@@ -155,19 +141,17 @@
         (if-not (nil? rdr) (.reset rdr))
         (catch Throwable t nil)) )) )
 
-(defn mkFileBackedXData
-  "Return a newly created XData backed up a new temp file."
+(defn make-fb-xdata ^{ :doc "Return a newly created XData backed up a new temp file." }
   []
-  (.setDeleteFile (XData. (mkTempFile)) true) )
+  (let [ rc (XData. (make-tmpfile)) ]
+    (.setDeleteFile rc true)
+    rc))
 
-(defn- swap-bytes
-  ""
-  [inp baos]
-  (let [ bits (.toByteArray baos) t (newTempFile true) os (nth t 1) ]
-    (.write os bits)
-    (.flush os)
+(defn- swap-bytes [inp baos]
+  (let [ bits (.toByteArray baos) t (newly-tmpfile true) os (nth t 1) ]
+    (-> os (.write bits) (.flush))
     (.close baos)
-    t) )
+    t))
 
 (defn- swap-read-bytes
   ""

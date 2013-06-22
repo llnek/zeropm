@@ -25,40 +25,38 @@
   (:import (java.nio ByteBuffer CharBuffer) )
   (:import (java.nio.charset Charset) )
   (:import (java.io
-    ByteArrayOutputStream ByteArrayInputStream DataOutputStream DataInputStream) )
+    ByteArrayOutputStream ByteArrayInputStream
+    DataOutputStream DataInputStream) )
   )
 
-(defn toByteArray
-  "Convert char[] to byte[]."
+(defn to-bytes ^{ :doc "Convert char[] to byte[]." }
   [ chArray charSetObj ]
   (.array (.encode charSetObj (CharBuffer/wrap chArray)) ) )
 
-(defn toCharArray
-  "Convert byte[] to char[]."
+(defn to-chars ^{ :doc "Convert byte[] to char[]." }
   [ byteArray charSetObj ]
   (.array (.decode charSetObj (ByteBuffer/wrap byteArray)) ) )
 
-(defn readLong
-  "Return a long by scanning the byte[]."
+(defn read-long ^{ :doc "Return a long by scanning the byte[]." }
   [ byteArray ]
   (.readLong (DataInputStream. (ByteArrayInputStream. byteArray)) ))
 
-(defn readInt
-  "Return an int by scanning the byte[]."
+(defn read-int ^{ :doc "Return an int by scanning the byte[]." }
   [ byteArray ]
   (.readInt (DataInputStream. (ByteArrayInputStream. byteArray)) ))
 
-(defmulti writeBytes class)
-(defmethod ^{ :doc "Write this long value out as byte[]." } writeBytes Long
-  [ num ]
+(defmulti ^{ :doc "Write this long value out as byte[]." } write-bytes class)
+
+(defmethod write-bytes Long
+  [num]
     (with-open [ baos (ByteArrayOutputStream. (int 4096)) ]
       (let [ ds (DataOutputStream. baos ) ]
         (.writeLong ds num)
         (.flush ds ) 
         (.toByteArray baos ) )))
 
-(defmethod ^{ :doc "Write this int value out as byte[]." } writeBytes  Integer
-  [ num ]
+(defmethod write-bytes Integer
+  [num]
     (with-open [ baos (ByteArrayOutputStream. (int 4096)) ]
       (let [ ds (DataOutputStream. baos ) ]
         (.writeInt ds num)

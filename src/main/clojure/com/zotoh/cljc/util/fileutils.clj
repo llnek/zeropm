@@ -20,53 +20,48 @@
 
 (ns ^{ :doc "General file related utilities." :author "kenl" }
   com.zotoh.cljc.util.fileutils
+  (:import (org.apache.commons.lang3 StringUtils))
   (:import (java.io
-    File FileInputStream FileOutputStream InputStream OutputStream ))
+    File FileInputStream FileOutputStream
+    InputStream OutputStream ))
   (:import (java.util ArrayList))
   (:import (org.apache.commons.io FileUtils))
-  (:import (org.apache.commons.lang3 StringUtils))
   (:import (org.apache.commons.io IOUtils))
   (:import (java.util.zip ZipFile ZipEntry))
-  (:require [ com.zotoh.cljc.util.coreutils :as CU ] )
+  (:require [ com.zotoh.cljc.util.coreutils :as CU ])
   )
 
-(defn isFileWR?
-  "Returns true if file is readable & writable."
+(defn file-readwrite? ^{ :doc "Returns true if file is readable & writable." }
   [fp]
   (if (and (not (nil? fp)) (.exists fp) (.isFile fp) (.canRead fp) (.canWrite fp))
     true
     false) )
 
-(defn isFileR?
-  "Returns true if file is readable."
+(defn file-read? ^{ :doc "Returns true if file is readable." }
   [fp]
   (if (and (not (nil? fp)) (.exists fp) (.isFile fp) (.canRead fp))
     true
     false) )
 
-(defn isDirWR?
-  "Returns true if directory is readable and writable."
+(defn dir-readwrite? ^{ :doc "Returns true if directory is readable and writable." }
   [dir]
   (if (and (not (nil? dir)) (.exists dir) (.isDirectory dir) (.canRead dir) (.canWrite dir) )
     true
     false) )
 
-(defn isDirR?
-  "Returns true if directory is readable."
+(defn dir-read? ^{ :doc "Returns true if directory is readable." }
   [dir]
   (if (and (not (nil? dir)) (.exists dir) (.isDirectory dir) (.canRead dir) )
     true
     false) )
 
-(defn canExec?
-  "Returns true if file or directory is executable."
+(defn can-exec? ^{ :doc "Returns true if file or directory is executable." }
   [fp]
   (if (and (not (nil? fp)) (.exists fp) (.canExecute fp))
     true
     false) )
 
-(defn parentPath
-  "Get the path to the parent directory."
+(defn parent-path ^{ :doc "Get the path to the parent directory." }
   [path]
   (if (StringUtils/isEmpty path)
     path
@@ -87,9 +82,8 @@
           (with-open [ os (FileOutputStream. f) ]
             (IOUtils/copy inp os)))))))
 
-(defn explodeZipFile
-  "Unzip contents of zip file to a target folder."
-  [ ^File src ^File des ]
+(defn unzip ^{ :doc "Unzip contents of zip file to a target folder." }
+  [^File src ^File des]
   (let [ fpz (ZipFile. src)  ents (.entries fpz) dummy (.mkdirs des) ]
     (loop [ hasMore (.hasMoreElements ents) ]
       (if (false? hasMore)

@@ -18,7 +18,7 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns ^{ :doc "One way to generate an unique id." :author "kenl" }
+(ns ^{ :doc "Ways to generate an unique id." :author "kenl" }
   com.zotoh.cljc.util.guid
   (:import (java.net InetAddress) )
   (:import (java.lang StringBuilder) )
@@ -29,47 +29,20 @@
   (:require [ com.zotoh.cljc.util.seqnumgen :as SQ ] )
   )
 
-(declare splitHiLoTime)
-(declare fmtXXX)
-(declare fmt)
+(defmulti ^:private fmtXXX  class)
 
-(def ^:private  _CHARS (.toCharArray "0123456789AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz"))
-(def ^:private  _UUIDLEN 36)
-
-(defn- maybeSetIP []
-  (try
-    (let [ neta (InetAddress/getLocalHost) b (.getAddress neta) ]
-      (if (.isLoopbackAddress neta )
-        (.nextLong (CU/newRandom))
-        (if (= 4 (alength b)) (long (BU/readInt b)) (BU/readLong b) )
-        ))
-    (catch Throwable e (.printStackTrace e))) )
-
-(def ^:private _IP (Math/abs (maybeSetIP)) )
-
-
-(defn newUUID
-  "rfc4122, version 4 form."
+(defn- splitHiLoTime
   []
-  ;; At i==19 set the high bits of clock sequence as per rfc4122, sec. 4.1.5
-  (let [ rc (char-array _UUIDLEN) rnd (CU/newRandom) ]
-    (dotimes [ n (alength rc) ]
-      (aset-char rc n (case n
-        (8 13 18 23) \-
-        (14) \4
-        (let [ r (bit-or 0 (.intValue (* (.nextDouble rnd) 16)) )
-               pos (if (= n 19) (bit-or (bit-and r 0x3) 0x8) (bit-and r 0xf) ) ]
-          (aget _CHARS pos))) ))
-    (String. rc)))
+  (let [ s (fmtXXX (CU/now-millis))
+         n (.length s) ]
+    [ (SU/left s (/ n 2)) (SU/right s (max 0 (- n (/ n 2 )) )) ] ))
 
-(defn newWWID
-  "Return a new guid based on time and ip-address."
-  []
-  (let [ seed (.nextInt (CU/newRandom) (Integer/MAX_VALUE))
-         ts (splitHiLoTime) ]
-      (str (nth ts 0) (fmtXXX _IP) (fmtXXX seed) (fmtXXX (SQ/nextInt)) (nth ts 1)) ))
+(defn- fmt [pad mask]
+  (let [ mlen (.length mask) plen (.length pad) ]
+    (if (>= mlen plen)
+      (.substring mask 0 plen)
+      (.toString (.replace (StringBuilder. pad) (- plen mlen) plen mask ) ))) )
 
-(defmulti ^:private fmtXXX  class )
 
 (defmethod ^:private fmtXXX Long
   [num]
@@ -79,20 +52,40 @@
   [num]
     (fmt "00000000"  (Integer/toHexString num)) )
 
-(defn- fmt
-  [pad mask]
-  (let [ mlen (.length mask) plen (.length pad) ]
-    (if (>= mlen plen)
-      (.substring mask 0 plen)
-      (.toString (.replace (StringBuilder. pad) (- plen mlen) plen mask ) ))) )
 
-(defn- splitHiLoTime
+;;(def ^:private  _CHARS (.toCharArray "0123456789AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz"))
+(def ^:private  _CHARS (.toCharArray "YcQnPuzVAvpi7taGj1XwoJbIK3smye96NlHrR2DZS0CUxkLF5O4g8fBTqMEdhW"))
+(def ^:private  _UUIDLEN 36)
+
+(defn- maybeSetIP []
+  (try
+    (let [ neta (InetAddress/getLocalHost) b (.getAddress neta) ]
+      (if (.isLoopbackAddress neta )
+        (.nextLong (CU/new-random))
+        (if (= 4 (alength b)) (long (BU/read-int b)) (BU/read-long b) )
+        ))
+    (catch Throwable e (.printStackTrace e))) )
+
+(def ^:private _IP (Math/abs (maybeSetIP)) )
+
+(defn new-uuid ^{ :doc "rfc4122, version 4 form." }
   []
-  (let [ s (fmtXXX (CU/nowMillis))
-         n (.length s) ]
-    [ (SU/left s (/ n 2)) (SU/right s (max 0 (- n (/ n 2 )) )) ] ))
+  ;; At i==19 set the high bits of clock sequence as per rfc4122, sec. 4.1.5
+  (let [ rc (char-array _UUIDLEN) rnd (CU/new-random) ]
+    (dotimes [ n (alength rc) ]
+      (aset-char rc n (case n
+        (8 13 18 23) \-
+        (14) \4
+        (let [ r (bit-or 0 (.intValue (* (.nextDouble rnd) 16)) )
+               pos (if (= n 19) (bit-or (bit-and r 0x3) 0x8) (bit-and r 0xf) ) ]
+          (aget _CHARS pos))) ))
+    (String. rc)))
 
-
+(defn new-wwid ^{ :doc "Return a new guid based on time and ip-address." }
+  []
+  (let [ seed (.nextInt (CU/new-random) (Integer/MAX_VALUE))
+         ts (splitHiLoTime) ]
+      (str (nth ts 0) (fmtXXX _IP) (fmtXXX seed) (fmtXXX (SQ/next-int)) (nth ts 1)) ))
 
 
 (def ^:private guid-eof  nil)

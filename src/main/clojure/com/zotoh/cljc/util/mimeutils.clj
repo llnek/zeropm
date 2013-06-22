@@ -114,7 +114,8 @@
 (defn- is-pkcs7mime "" [s] (>= (.indexOf s "application/x-pkcs7-mime") 0))
 (defn- mime-cache "" [] @_mime_cache)
 
-(defn get-charset "" [cType]
+(defn get-charset ^{ :doc "Get charset from this content-type string." }
+  [cType]
   (let [ pos (-> (SU/nsb cType) (.toLowerCase) (.indexOf "charset="))
        ;;rc "ISO-8859-1"
          rc "utf-8" ]
@@ -123,45 +124,52 @@
         (if (> pos 0) (.substring s 0 p) rc))
       rc)) )
 
-(defn is-signed? "" [cType]
+(defn is-signed? { ^:doc "Returns true if this content-type indicates signed." }
+  [cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (or (>= (.indexOf ct "multipart/signed") 0)
         (and (is-pkcs7mime? ct) (>= (.indexOf ct "signed-data") 0)))) )
 
-(defn is-encrypted? "" [cType]
+(defn is-encrypted? { ^:doc "Returns true if this content-type indicates encrypted." }
+  [cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (and (is-pkcs7mime? ct) (>= (.indexOf ct "enveloped-data") 0))) )
 
-(defn is-compressed? "" [cType]
+(defn is-compressed? { ^:doc "Returns true if this content-type indicates compressed." }
+  [cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (and (>= (.indexOf ct "application/pkcs7-mime") 0) (>= (.indexOf ct "compressed-data") 0))) )
 
-(defn is-mdn? "" [cType]
+(defn is-mdn? { ^:doc "Returns true if this content-type indicates MDN." }
+  [cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (and (>= (.indexOf ct "multipart/report") 0) (>= (.indexOf ct "disposition-notification") 0))) )
 
-(defn maybe-stream "" [obj]
+(defn maybe-stream  ^{ :doc "Turn this object into some form of stream, if possible." }
+  [obj]
   (cond
-    (instance? String obj) (IO/toStream (CU/getBytes (cast String obj)))
+    (instance? String obj) (IO/streamify (CU/bytesify (cast String obj)))
     (instance? InputStream obj) (cast InputStream obj)
-    (instance? bytes obj) (IO/toStream (cast bytes obj))
+    (instance? bytes obj) (IO/streamify (cast bytes obj))
     :else nil))
 
-(defn url-decode "" [u]
+(defn url-decode  ^{ :doc "URL decode this string." }
+  [u]
   (if (nil? u)
     nil
     (try
       (URLDecoder/decode u "utf-8")
       (catch Throwable e nil))))
 
-(defn url-encode "" [u]
+(defn url-encode ^{ :doc "URL encode this string." }
+  [u]
   (if (nil? u)
     nil
     (try
       (URLEncoder/encode u "utf-8")
       (catch Throwable e nil))))
 
-(defn guess-mimetype ""
+(defn guess-mimetype ^{ :doc "Guess the MIME type of file." }
   ([file] (guess-mimetype file ""))
   ([file dft]
     (let [ mc (.matcher _extRegex (.toLowerCase (.getName file)))
@@ -169,14 +177,15 @@
            p (SU/nsb (.getProperty (mime-cache) ex)) ]
       (if (SU/hgl? p) p dft))) )
 
-(defn guess-contenttype ""
+(defn guess-contenttype ^{ :doc "Guess the content-type of file." }
   ([file] (guess-contenttype file "utf-8" "application/octet-stream" ))
   ([file enc dft]
     (let [ mt (guess-mimetype file)
            ct (if (SU/hgl? mt) mt dft) ]
       (if (not (.startsWith ct "text/")) ct (str ct "; charset=" enc)))) )
 
-(defn setup-cache "" [fileUrl]
+(defn setup-cache  ^{ :doc "Load file mime-types as properties." }
+  [fileUrl]
   (with-open [ inp (.openStream fileUrl) ]
     (let [ ps (Properties.) ]
       (.load ps inp)

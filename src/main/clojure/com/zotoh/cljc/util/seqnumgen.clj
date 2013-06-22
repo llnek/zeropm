@@ -26,13 +26,11 @@
 (def ^:private _numInt (AtomicInteger. 1))
 (def ^:private  _numLong (AtomicLong. 1))
 
-(defn nextInt
-  "Return a sequence number (integer)."
+(defn next-int ^{ :doc "Return a sequence number (integer)." }
   []
   (.getAndIncrement _numInt))
 
-(defn nextLong
-  "Return a sequence number (long)."
+(defn next-long ^{ :doc "Return a sequence number (long)." }
   []
   (.getAndIncrement _numLong))
 

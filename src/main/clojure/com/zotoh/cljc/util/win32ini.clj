@@ -19,10 +19,11 @@
 
 (ns ^{ :doc "Functions to load and query a .ini file." :author "kenl" }
   com.zotoh.cljc.util.win32ini
-  (:import (java.io File IOException FileReader LineNumberReader PrintStream))
-  (:import (java.util LinkedHashMap))
-  (:import (com.zotoh.frwk.util NCMap))
   (:import (org.apache.commons.lang3 StringUtils))
+  (:import (java.io File IOException
+    FileReader LineNumberReader PrintStream))
+  (:import (com.zotoh.frwk.util NCMap))
+  (:import (java.util LinkedHashMap))
   (:require [ com.zotoh.cljc.util.coreutils :as CU ] )
   (:require [ com.zotoh.cljc.util.strutils :as SU ] )
   )
@@ -93,7 +94,7 @@
       (throwBadKey k)
       (.get mp k))) )
 
-(deftype Win32Conf [ mapOfSections ] IWin32Conf
+(deftype Win32Conf [mapOfSections] IWin32Conf
   (getSectionAsMap [this sectionName] (if (nil? sectionName) nil (.get mapOfSections sectionName) ))
   (sectionKeys [this] (.keySet mapOfSections))
   (getString [this section property]
@@ -104,22 +105,22 @@
       (SU/nsb v)))
   (getLong [this section property]
     (let [ v (getKV this section property true) ]
-      (CU/convLong (SU/nsb v) 0)) )
+      (CU/conv-long (SU/nsb v) 0)) )
   (optLong [this section property]
     (let [ v (getKV this section property false) ]
-      (CU/convLong (SU/nsb v) 0)) )
+      (CU/conv-long (SU/nsb v) 0)) )
   (getDouble [this section property]
     (let [ v (getKV this section property true) ]
-      (CU/convDouble (SU/nsb v) 0.0)) )
+      (CU/conv-double (SU/nsb v) 0.0)) )
   (optDouble [this section property]
     (let [ v (getKV this section property false) ]
-      (CU/convDouble (SU/nsb v) 0.0)) )
+      (CU/conv-double (SU/nsb v) 0.0)) )
   (getBool [this section property]
     (let [ v (getKV this section property true) ]
-      (CU/convBool (SU/nsb v) false)) )
+      (CU/conv-bool (SU/nsb v) false)) )
   (optBool [this section property]
     (let [ v (getKV this section property false) ]
-      (CU/convBool (SU/nsb v) false)) )
+      (CU/conv-bool (SU/nsb v) false)) )
   (dbgShow [this]
     (doseq [ [k v] (seq mapOfSections) ]
       (do

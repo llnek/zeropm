@@ -27,32 +27,28 @@
   (:require [ com.zotoh.cljc.util.strutils :as SU])
   )
 
-(defn asyncExec
-  "Run the code (runnable) in a separate daemon thread."
+(defn async-exec ^{ :doc "Run the code (runnable) in a separate daemon thread." }
   [runable]
   (if (nil? runable)
     nil
     (doto (Thread. runable)
-      (.setContextClassLoader (MU/getCZldr))
+      (.setContextClassLoader (MU/get-cldr))
       (.setDaemon true)
       (.start))) )
 
-(defn coroutine
-  "Run this function asynchronously."
+(defn coroutine ^{ :doc "Run this function asynchronously." }
   [func]
   (let [ r (reify Runnable
              (run [_] (do (func)))) ]
-    (asyncExec r)))
+    (async-exec r)))
 
-(defn safeWait
-  "Block current thread for some millisecs."
+(defn safe-wait ^{ :doc "Block current thread for some millisecs." }
   [millisecs]
   (try
     (if (> millisecs 0) (Thread/sleep millisecs))
     (catch Throwable t nil)))
 
-(defn pid
-  "Get the current process pid."
+(defn pid ^{ :doc "Get the current process pid." }
   []
   (let [ ss (.split (SU/nsb (.getName (ManagementFactory/getRuntimeMXBean))) "@") ]
     (if (or (nil? ss) (empty ss)) "" (first ss))) )
