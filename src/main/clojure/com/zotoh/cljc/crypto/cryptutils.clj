@@ -512,8 +512,8 @@
       (cast MimeMultipart mp)
       (get-charset (.getContentType mp) "binary")) (.getContent) (.getContent)) )
 
-(defn test-digsig ^{ :doc "" }
-  ([mp certs] (test-digsig mp certs ""))
+(defn test-smimeDigSig ^{ :doc "" }
+  ([mp certs] (test-smimeDigSig mp certs ""))
   ([mp certs cte]
     (let [ mmp (cast MimeMultipart mp)
            sc (if (SU/hgl? cte) (SMIMESigned. mmp cte) (SMIMESigned. mmp))
@@ -603,6 +603,64 @@
 
   ([msg]
     (-> (SMIMECompressedGenerator.) (.generate msg (SMIMECompressedGenerator/ZLIB))))
+
+  ([cType cte contentLoc cid xdata]
+    (let [ gen (SMIMECompressedGenerator.)
+           bp (MimeBodyPart.)
+           ds (if (.isDiskFile xdata) (SDataSource. (.fileRef xdata) cType)
+                    (SDataSource. (.javaBytes xdata) cType)) ]
+      (when (SU/hgl? contentLoc) (.setHeader bp "content-location" contentLoc))
+      (.setHeader bp "content-id" cid)
+      (.setDataHandler bp (DataHandler. ds))
+      (let [ zbp (.generate gen bp SMIMECompressedGenerator.ZLIB)
+             pos (.lastIndexOf cid \>)
+             cID (if (>= pos 0) (str (.substring cid 0 pos) "--z>") (str cID "--z")) ]
+        (when (SU/hgl? contentLoc) (.setHeader zbp "content-location" contentLoc))
+        (.setHeader zbp "content-id" cID)
+        ;; always base64
+        ;;cte="base64"
+        (.setHeader zbp "content-transfer-encoding" "base64")
+        zbp))) )
+
+(defn pkcs-digsig ^{ :doc "" }
+  [pkey certs algo xdata]
+    (let [ gen (CMSSignedDataGenerator.)
+           cl (list (seq certs))
+           cert (cast X509Certificae (first cl))
+           cs (-> (JcaContentSignerBuilder. (SU/nsb algo)) (.setProvider *BCProvider*) (.build pkey))
+           bdr (JcaSignerInfoGeneratorBuilder.
+                  (-> (JcaDigestCalculatorProviderBuilder.) (.setProvider *BCProvider*) (.build))) ]
+      (.setDirectSignature bdr true)
+      (.addSignerInfoGenerator gen (.build bdr cs cert))
+      (.addCertificates gen (JcaCertStore. cl))
+      (let [ cms (if (.isDiskFile xdata) (CMSProcessableFile. (.fileRef xdata))
+                      (CMSProcessableByteArray. (.javaBytes xdata))) ]
+        (.getEncoded (.generate gen cms false) ))) )
+
+(defn test-pkcsDigSig ^{ :doc "" }
+  [cert xdata signature]
+    (let [ cproc (if (.isDiskFile xdata) (CMSProcessableFile (.fileRef xdata))
+                   (CMSProcessableByteArray. (.javaBytes xdata)))
+           cms (CMSSignedData. cproc signature)
+           s (JcaCertStore. (list cert))
+           sls (-> cms (.getSignerInfos) (.getSigners)) ]
+
+    cms.getSignerInfos.getSigners.foreach { (i) =>
+      val si=i.asInstanceOf[SignerInformation]
+      val c=s.getMatches(si.getSID)
+      val it= c.iterator
+
+      while ( it.hasNext ) {
+        val bdr=new JcaSimpleSignerInfoVerifierBuilder().setProvider(Crypto.provider)
+        if ( si.verify( bdr.build( it.next().asInstanceOf[XCertHdr]) )) {
+          val digest=si.getContentDigest
+          if (digest != null) { return digest }
+        }
+      }
+    }
+    throw new GeneralSecurityException("Failed to decode signature: no matching cert.")
+  }
+
 
 
 
