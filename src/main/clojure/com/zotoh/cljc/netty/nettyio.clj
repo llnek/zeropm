@@ -21,58 +21,16 @@
 (ns ^{ :doc "" :author "kenl" }
   com.zotoh.cljc.netty.nettyio
   (:use [clojure.tools.logging :only (info warn error debug)])
-  (:import (com.zotoh.frwk.io XData))
-  (:import (com.zotoh.frwk.net NetUtils HTTPResponseHdlr))
-  (:import (org.jboss.netty.channel.Channels.pipeline))
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:import (org.apache.commons.io IOUtils))  
-  (:import (java.io ByteArrayOutputStream File IOException))
-  (:import (java.net URI InetSocketAddress))
-  (:import (java.nio ByteBuffer))
-  (:import (java.util HashMap))
-  (:import (java.util.concurrent Executors))
-  (:import (javax.net.ssl SSLEngine))
-  (:import (org.jboss.netty.bootstrap ClientBootstrap))
-  (:import (org.jboss.netty.buffer ByteBufferBackedChannelBuffer))
-  (:import (org.jboss.netty.channel
-    Channel SimpleChannelHandler ChannelFuture
-    ChannelFutureListener ChannelPipeline ChannelPipelineFactory))
-  (:import (org.jboss.netty.channel.group DefaultChannelGroup ChannelGroup))
-  (:import (org.jboss.netty.channel.socket.nio NioClientSocketChannelFactory))
-  (:import (org.jboss.netty.handler.codec.http
-    HttpResponseStatus DefaultHttpResponse HttpClientCodec
-    HttpChunk HttpHeaders HttpMethod HttpRequest HttpResponse HttpVersion DefaultHttpRequest ))
-  (:import (org.jboss.netty.handler.ssl SslHandler))
-  (:import (org.jboss.netty.handler.stream ChunkedWriteHandler ChunkedStream))
-  (:require [com.zotoh.cljc.util.coreutils :as CU])
-  (:require [com.zotoh.cljc.util.strutils :as SU])
-  (:require [com.zotoh.cljc.net.netutils :as NU])
   )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defn make-server-bootstrap ^{ :doc "" }
+  []
+  (let [ b (ServerBootstrap. (NioServerSocketChannelFactory.
+            (Executors/newCachedThreadPool)
+            (Executors/newCachedThreadPool))) ]
+    b))
 
-(defn- cfg-bootstrap!
-  ""
-  [ssl bs cg cbFunc]
-  (let [ pf (reify ChannelPipelineFactory
-              (getPipeline [this]
-                (let [ pl (org.jboss.netty.channel.Channels/pipeline) ]
-                  (when ssl
-                    (let [ eng (NU/simpleClientSSLEngine) ]
-                      (.setUseClientMode eng true)
-                      (.addLast pl "ssl" (SslHandler. eng))))
-                  (.addLast pl "codec" (HttpClientCodec.))
-                  ;;(.addLast pl "inflater" (HttpContentDecompressor.))
-                  ;;(.addLast pl "aggregator" (HttpChunkAggregator. (int 1048576)))
-                  (.addLast pl "chunker" (ChunkedWriteHandler.))
-                  (.addLast pl "handler" (HTTPResponseHdlr. cg))
-                pl))) ]
-    (.setPipelineFactory bs pf)
-    bs))
-
-(defn- mkcli-bootstrap
-  ""
+(defn make-client-bootstrap ^{ :doc "" }
   []
   (let [ bs (ClientBootstrap. (NioClientSocketChannelFactory.
                        (Executors/newCachedThreadPool) (Executors/newCachedThreadPool))) ]
@@ -80,196 +38,20 @@
     (.setOption bs "keepAlive" true)
     bs))
 
-(defn- cr-request
-  ""
-  [targetUrl mtd]
-  (do (DefaultHttpRequest. (HttpVersion/HTTP_1_1) mtd (.toASCIIString targetUrl)) ))
+(defn make-channel-group ^{ :doc "" } [] (DefaultChannelGroup. (CU/uid)))
 
-(defn- setup-netty
-  ""
-  [targetUrl cbFunc]
-  (let [ host (.getHost targetUrl) port (.getPort targetUrl)
-         ssl (= "https" (.getScheme targetUrl))
-         bs (mkcli-bootstrap)
-         cg (DefaultChannelGroup. (CU/uid))
-         bs (cfg-bootstrap! ssl bs cg cbFunc)
-         cf (.connect bs (InetSocketAddress. host port))
-        ]
-    ;; wait until the connection attempt succeeds or fails.
-    (.awaitUninterruptibly cf)
-    (if (.isSuccess cf)
-      (let [ ch (.getChannel cf) ]
-        (debug "setup-netty: connected OK to url: " targetUrl)
-        (.add cg ch)
-        ch)
-      (if (nil? (.getCause cf)) (throw (IOException. "Connection failed.")) (throw (.getCause cf)))) ))
-
-(defn- cfg-req
-  ""
-  [targetUrl ctype req data ch cb]
-  (let [ clen (if (.hasContent data) (.size data) 0) ]
-    (debug "cfg-req: " (if (.hasContent data) "post" "get") ": " targetUrl)
-    (.setHeader req (.CONNECTION (.Names HttpHeaders)) 
-      (if (.keepAlive cb) (.KEEP_ALIVE (.Values HttpHeaders)) (.CLOSE (.Values HttpHeaders))))
-
-    (debug "cfg-req: content has length: " clen)
-    (.setHeader req "content-length" (.toString clen))
-
-    (.setHeader req (.HOST (.Names HttpHeaders)) (.getHost targetUrl))
-    ;; allow for extra settings via the input object
-    (.configMsg cb req)
-
-    (when (and (.hasContent data)  (StringUtils/isEmpty (.getHeader req "content-type")) (SU/hgl? ctype))
-      (.setHeader req "content-type" ctype) )
-
-    (debug "cfg-req: about to flush out request (headers)")
-    (.write ch req)) )
-
-(defn- cli-send
-  ""
-  [targetUrl ctype req data ch cb]
-  (let [ cf (cfg-req targetUrl ctype req data ch cb)
-         clen (if (.hasContent data) (.size data) 0) ]
-    (.addListener cf (NetUtils/dbgNettyDone "req headers flushed"))
-    (when (> clen 0)
-      (let [ fu (if (> clen (com.zotoh.frwk.io.IOUtils/streamLimit))
-                  (.write ch (ChunkedStream. (.stream data)))
-                  (.write ch (ByteBufferBackedChannelBuffer. (ByteBuffer/wrap (.javaBytes data) )))) ]
-        (.addListener fu (NetUtils/dbgNettyDone "req payload flushed")) ))) )
-
-(defn asyncPost
-  ""
-  [targetUrl contentType data cbFunc]
-  (let [ req (cr-request targetUrl (HttpMethod/GET))
-         ch (setup-netty targetUrl cbFunc) ]
-    (cli-send targetUrl contentType req data ch cbFunc)) )
-
-(defn asyncGet
-  ""
-  [targetUrl cbFunc]
-  (let [ req (cr-request targetUrl (HttpMethod/GET))
-         ch (setup-netty targetUrl cbFunc) ]
-    (cli-send targetUrl "" req nil ch cbFunc)) )
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defn- nio-mapheaders
-  ""
-  [msg]
-  (let [ names (.getHeaderNames msg)
-         jm (HashMap.) ]
-    (doseq [ n (seq names) ]
-      (.put jm n (vec (.getHeaders msg n))))
-    (into {} jm)))
-
-(defn- send-100-cont "" [ev]
-  (let [ ch (.getChannel ev) ]
-    (.write ch (DefaultHttpResponse. HttpVersion/HTTP_1_1  HttpResponseStatus/CONTINUE))
-    nil))
-
-(defn- nio-pcomplete "" [ctx ev msg]
-  (let [ ch (.getChannel ctx)
-         att (.getAttachment ch) ]
-    ))
-
-
-
-(defn- nio-sockit-down "" [ctx msg]
-  (let [ cbuf (.getContent msg)
-         att (.getAttachment ctx)
-         xdata (:xs att)
-         cout (:os att)
-         csum (:clen att)
-         nsum (NetUtils/sockItDown cbuf cout csum)
-         nout (if (.isDiskFile xdata)
-                  cout
-                  (NetUtils/swapFileBacked xdata cout nsum)) ]
-    (.setAttachment ctx (hash-map :xs xdata :os nout :clen nsum)) ))
-
-(defn- nio-cfgctx "" [ctx]
-  (let [ x (XData.) os (ByteArrayOutputStream. (int 10000)) clen 0
-         m (hash-map :xs x :os os :clen clen) ]
-    (.setAttachment ctx m)))
-
-(defn- nio-finz "" [ctx]
-  (let [ att (.getAttachment ctx)
-         os (:os att) ]
-    (IOUtils/closeQuietly os)))
-
-(defn- nio-presbody "" [ctx ev res]
-  (let []
-    (nio-cfgctx ctx)
-    (if (.isChunked res)
-      (debug "nio-presbody: response is chunked.")
-      (try
-        (nio-sockit-down ctx res)
-        (finally (nio-finz ctx))))))
-
-(defn- nio-perror "" [ctx ev]
-  (let [] ))
-
-(defn- nio-pres "" [ctx ev res]
-  (let [ s (.getStatus res)
-         r (.getReasonPhrase s)
-         c (.getCode s) ]
-    (debug "nio-pres: got a response: code " c " reason: " r)
-    (cond
-      (and (>= c 200) (< c 300)) (nio-presbody ctx ev res)
-      (and (>= c 300) (< c 400)) (nio-perror ctx ev)
-      :else (nio-perror ctx,ev))))
-
-(defn- nio-preq "" [ctx ev req]
-  (let [ mtd (.. req getMethod getName) uri (.getUri req) hds (nio-mapheaders req) ]
-    (debug "nio-preq: received a " mtd " request from " uri)
-    (when (HttpHeaders/is100ContinueExpected req) (send-100-cont ev))
-    (nio-cfgctx ctx)
-    (if (.isChunked req)
-      (debug "nio-preq: request is chunked.")
-      (try
-        (nio-sockit-down ctx req)
-        (finally (nio-finz ctx))))))
-
-(defn- nio-chunk "" [ctx ev msg]
-  (try
-    (nio-sockit-down ctx msg)
-    (when (.isLast msg) (nio-pcomplete ctx ev msg))
-    (catch Throwable e#
-      (do (nio-finz ctx) (throw e#)))) )
-
-(defn httpSimpleReply "" [ctx status]
-  (let [ res (DefaultHttpResponse. (HttpVersion/HTTP_1_1) status)
-         ch (.getChannel ctx)
-         att (.getAttachment ch) ]
-    (.setHeader res "content-length" "0")
-    (.setChunked res false)
-    (.write ch res)
-    (if-not (:keepalive att) (.close ch))))
-
-(defn httpReply "" [ctx status data beforeSend]
-  (let [ res (DefaultHttpResponse. (HttpVersion/HTTP_1_1) status)
-         ch (.getChannel ctx)
-         att (.getAttachment ch) ]
-    (.setHeader res "content-type" "application/octet-stream")
-    (.setHeader res "content-length" (str (.size data)))
-    (.setChunked res false)
-    (when-not (nil? beforeSend) (beforeSend res))
-    (.write ch res)
-    (let [ cf (.write ch (ChunkedStream. (.stream data))) ]
-      (if-not (:keepalive att)
-        (.addListener (ChannelFutureListener/CLOSE))))) )
-
-(defn mkChannelHandler "" [myHandler]
-  (proxy [ SimpleChannelHandler ] []
-    (messageReceived [ _ ctx ev ]
-      (let [ msg (.getMessage ev) ]
-        (cond
-          (instance? HttpResponse msg) (nio-pres ctx ev msg myHandler)
-          (instance? HttpRequest msg) (nio-preq ctx ev msg myHandler)
-          (instance? HttpChunk msg) (nio-chunk ctx ev msg myHandler)
-          :else (throw (IOException. "Received some unknown object." ) )))
-    )) )
+(defn make-ssl-context ^{ :doc "" }
+  [keyUrl pwdObj]
+  (let [ ctx (SSLContext/getInstance "TLS") ]
+    (with-open [ inp (.openStream keyUrl) ]
+      (let [ ks (if (-> keyUrl (.getFile) (.toLowerCase) (.endsWith ".jks")) (CY/get-jksStore) (CY/get-pkcsStore))
+             cs (->CryptoStore (doto ks (CY/init-store! (cast InputStream nil) pwdObj)) pwdObj) ]
+        (.addKeyEntity cs inp pwdObj)
+        (.init ctx
+          (-> cs (.keyManagerFactory ) (.getKeyManagers))
+          (-> cs (.trustManagerFactory) (.getTrustManagers))
+          (CY/get-srand))
+        (doto (.createSSLEngine ctx) (.setUseClientMode false))))) )
 
 
 
@@ -280,23 +62,4 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-(def ^:private nettyio-eof nil)
 

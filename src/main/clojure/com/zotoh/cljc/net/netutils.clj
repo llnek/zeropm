@@ -205,7 +205,7 @@
   (configMsg! [this msg] nil)
   (validateRequest [this ctx] true) )
 
-(defn make-simpleClientSSLEngine ^{ :doc "SImple minded, trusts everyone." }
+(defn make-simpleClientSSLEngine ^{ :doc "Simple minded, trusts everyone." }
   []
   (let [ c (SSLContext/getInstance "TLS") ]
     (.init c nil (SSLTrustMgrFactory/getTrustManagers) nil)) )

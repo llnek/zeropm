@@ -38,7 +38,7 @@
 (defn- onNewKey [keystore nm pkey pm]
   (let [ cc (.getCertificateChain pkey) ]
     (doseq [ c (seq cc) ]
-      (.setCertificateEntry keystore (CO/newAlias) c))
+      (.setCertificateEntry keystore (CO/new-alias) c))
     (.setEntry keystore nm pkey pm)))
 
 (defn- getCAs "" [keystore tca root]
@@ -72,21 +72,26 @@
   (trustedCerts [this] )
   (addPKCS7Entity [this bits] ))
 
+(defn- mkStore [keystore]
+  (case (.getType keystore)
+    "PKCS12" (CO/get-pkcsStore)
+    "JKS" (CO/get-jksStore)
+    (throw (IllegalArgumentException. "wrong keystore type."))))
+  
 (deftype CryptoStore [keystore passwd] CryptoStoreAPI
 
-  (addKeyEntity [this bits pwd]
+  (addKeyEntity [this bits pwdObj]
     ;; we load the p12 content into an empty keystore, then extract the entry
     ;; and insert it into the current one.
-    (let [ tmp (.createKeyStore this)
-           ch (.toCharArray pwd)
-           d1 (.load tmp bits ch)
+    (let [ ch (.toCharArray pwdObj)
+           tmp (doto (mkStore keystore) (.load bits ch))
            pp (KeyStore$PasswordProtection. ch)
            pkey (cast KeyStore$PrivateKeyEntry (.getEntry tmp (.nextElement (.aliases tmp)) pp)) ]
-    (.onNewKey this (CO/newAlias) pkey pp)))
+    (.onNewKey this (CO/new-alias) pkey pp)))
 
   (addCertEntity [this bits]
     (let [ c (cast X509Certificate (.generateCertificate (CertificateFactory/getInstance "X.509") bits)) ]
-      (.setCertificateEntry keystore (CO/newAlias) c)))
+      (.setCertificateEntry keystore (CO/new-alias) c)))
 
   (trustManagerFactory [this]
     (let [ m (TrustManagerFactory/getInstance (TrustManagerFactory/getDefaultAlgorithm)) ]
@@ -146,7 +151,7 @@
   (addPKCS7Entity [this bits]
     (let [ certs (.generateCertificates (CertificateFactory/getInstance "X.509") bits) ]
       (doseq [ c (seq certs) ]
-        (.setCertificateEntry keystore (CO/newAlias) (cast Certificate c)))))
+        (.setCertificateEntry keystore (CO/new-alias) (cast Certificate c)))))
 
 )
 
