@@ -28,7 +28,8 @@
   (:import (org.apache.commons.io FileUtils))
   (:import (org.apache.commons.io IOUtils))
   (:import (java.util.zip ZipFile ZipEntry))
-  (:require [ com.zotoh.cljc.util.coreutils :as CU ])
+  (:import (com.zotoh.frwk.io XData))
+  (:require [ com.zotoh.cljc.util.coreutils :as CU])
   )
 
 (defn file-readwrite? ^{ :doc "Returns true if file is readable & writable." }
@@ -92,8 +93,22 @@
           (doOneEntry fpz des (.nextElement ents))
           (recur (.hasMoreElements ents)))))))
 
+(defn save-file ^{ :doc "Save a file to a directory." }
+  [^File dir ^String fname ^XData xdata]
+  (let [ fp (File. dir fname) ]
+    (FileUtils/deleteQuietly fp)
+    (if (.isDiskFile xdata)
+      (FileUtils/moveFile (.fileRef xdata) fp)
+      (FileUtils/writeByteArrayToFile fp (.javaBytes xdata)))
+    (info "saved file: " (CU/nice-fpath fp) ", " (.length fp) " (bytes) - OK.")))
 
-
+(defn get-file ^{ :doc "Get a file from a directory." }
+  [^File dir ^String fname]
+  (let [ fp (File. dir fname) rc (XData.) ]
+    (if (and (.exists fp) (.canRead fp))
+      (doto rc (.setDeleteFile false)
+              (.resetContent fp) )
+      nil)) )
 
 
 

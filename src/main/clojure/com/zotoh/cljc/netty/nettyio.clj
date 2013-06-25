@@ -37,49 +37,35 @@
     HttpResponseEncoder))
   (:import (org.jboss.netty.handler.ssl SslHandler))
   (:import (org.jboss.netty.handler.stream ChunkedWriteHandler))
-  (:require [com.zotoh.cljc.crypto.cryptutils :as CY])  
-  (:require [com.zotoh.cljc.crypto.stores :as ST])  
+  (:require [com.zotoh.cljc.crypto.cryptutils :as CY])
+  (:require [com.zotoh.cljc.crypto.stores :as ST])
+  (:require [com.zotoh.cljc.net.netutils :as NU])
   (:require [com.zotoh.cljc.util.coreutils :as CU])
   )
 
-(defn- make-cf-lsnr [keeyAlive?]
+(defn- make-cf-lsnr [msginfo]
   (reify ChannelFutureListener
-    (operationComplete [this cf]
-      (when (not keepAlive?) (.close (.getChannel cf))))))
+    (operationComplete [_ cf]
+      (when-not (get msginfo :keep-alive) (.close (.getChannel cf))))))
 
 (defn make-server-bootstrap ^{ :doc "" }
   []
   (let [ b (ServerBootstrap. (NioServerSocketChannelFactory.
             (Executors/newCachedThreadPool)
             (Executors/newCachedThreadPool))) ]
-    b))
+    (doto b
+      (.setOption "reuseAddress" true)
+      ;; Options for its children
+      (.setOption "child.receiveBufferSize" 1024*1024)
+      (.setOption "child.tcpNoDelay" true))))
 
 (defn make-client-bootstrap ^{ :doc "" }
   []
   (let [ bs (ClientBootstrap. (NioClientSocketChannelFactory.
                        (Executors/newCachedThreadPool) (Executors/newCachedThreadPool))) ]
-    (.setOption bs "tcpNoDelay" true)
-    (.setOption bs "keepAlive" true)
     bs))
 
 (defn make-channel-group ^{ :doc "" } [] (DefaultChannelGroup. (CU/uid)))
-
-(defn save-vfile ^{ :doc "" }
-  [dir fname xdata]
-  (let [ fp (File. dir fname) ]
-    (FileUtils/deleteQuietly fp)
-    (if (.isDiskFile xdata)
-      (FileUtils/moveFile (.fileRef xdata) fp)
-      (FileUtils/writeByteArrayToFile fp (.javaBytes xdata)))
-    (info "nettyio: saved file: " (CU/nice-fpath fp) ", " (.length fp) " (bytes) - OK.")))
-
-(defn get-vfile ^{ :doc "" }
-  [dir fname]
-  (let [ fp (File. dir fname) rc (XData.) ]
-    (if (and (.exists fp) (.canRead fp))
-      (doto rc (.setDeleteFile false)
-              (.resetContent fp) )
-      nil)) )
 
 (defn make-ssl-context ^{ :doc "" }
   [keyUrl pwdObj]
@@ -94,6 +80,143 @@
           (CY/get-srand))
         (doto (.createSSLEngine ctx) (.setUseClientMode false))))) )
 
+(defn- nio-mapheaders [msg]
+  (let [ names (.getHeaderNames msg) jm (HashMap.) ]
+    (doseq [ n (seq names) ]
+      (.put jm (.toLowerCase n) (vec (.getHeaders msg n))))
+    (into {} jm)))
+
+(defn- nio-extract-msg [msg]
+  (let [ pn (-> msg (.getProtocolVersion) (.toString))
+         chunked (.isChunked msg)
+         clen (HttpHeaders/getContentLength msg)
+         kalive (HttpHeaders/isKeepAlive msg)
+         headers (reduce (fn [sum n]
+                      (assoc sum (.toLowerCase n) (vec (.getHeaders msg n))))
+                      {} (seq (.getHeaderNames msg))) ]
+    (hashmap :protocol pn :is-chunked chunked :keep-alive kalive :clen clen :headers headers)))
+
+(defn- nio-extract-req [req]
+  (let [ decr (QueryStringDecoder. (.getUri req))
+         md (-> req (.getMethod) (.getName))
+         uri (.getPath decr)
+         m1 (nio-extract-msg req)
+         params (reduce (fn [sum en]
+                      (assoc sum (nth en 0) (vec (nth en 1)))
+                      {} (seq (.getParameters decr)))) ]
+    (merge (hashmap :method md :uri uri :params params) m1)))
+
+(defn- nio-extract-res [res] (nio-extract-msg res))
+
+(defprotocol NettyServiceIO
+  (onerror [this ch exp] )
+  (onreq [this ch msginfo xdata] )
+  (onres [this ch msginfo xdata] ))
+
+(defn- send-100-cont [ev]
+  (let [ ch (.getChannel ev) ]
+    (.write ch (DefaultHttpResponse. HttpVersion/HTTP_1_1  HttpResponseStatus/CONTINUE))
+    nil))
+
+(defn- nio-pcomplete [ctx ev msg]
+  (let [ ch (.getChannel ctx)
+         attObj (.getAttachment ch)
+         xdata (get attObj :xs)
+         info (get attObj :info)
+         dir (get attObj :dir)
+         os (get attObj :os)
+         clen (get attObj :clen) ]
+    (when (and (> clen 0) (instance? ByteArrayOutputStream os))
+      (.resetContent xdata os))
+    (cond
+      (= dir -1) (.onres usercb ch info xdata)
+      (= dir 1) (.onreq usercb ch info xdata)
+      :else  nil)
+    ))
+
+(defn- nio-sockit-down [ctx msg]
+  (let [ attObj (.getAttachment ctx)
+         cbuf (.getContent msg)
+         xdata (get attObj :xs)
+         cout (get attObj :os)
+         csum (get attObj :clen)
+         nsum (NetUtils/sockItDown cbuf cout csum)
+         nout (if (.isDiskFile xdata)
+                  cout
+                  (NetUtils/swapFileBacked xdata cout nsum)) ]
+    (.setAttachment ctx (merge attObj (hash-map :os nout :clen nsum)) )))
+
+(defn- nio-cfgctx [ctx atts usercb]
+  (let [ os (IO/make-baos)
+         x (XData.)
+         clen 0
+         m (merge (hash-map :xs x :os os :clen clen :cb usercb) atts) ]
+    (.setAttachment ctx m)))
+
+(defn- nio-perror [ctx ev]
+  (let [ ch (.getChannel ctx)
+         exp (.getCause ev)
+         attObj (.getAttachment ch)
+         usercb (get attObj :cb) ]
+    (.onerror usercb exp)))
+
+(defn- nio-finz [ctx]
+  (let [ att (.getAttachment ctx) os (:os att) ] (IOUtils/closeQuietly os)))
+
+(defn- nio-preq [ctx ev req usercb]
+  (let [ mtd (.. req getMethod getName) uri (.getUri req) hds (nio-mapheaders req) ]
+    (nio-cfgctx ctx { :dir 1 :info (nio-exract-req req) } usercb)
+    (when (HttpHeaders/is100ContinueExpected req) (send-100-cont ev))
+    (debug "nio-preq: received a " mtd " request from " uri)
+    (if (.isChunked req)
+      (debug "nio-preq: request is chunked.")
+      (try
+        (nio-sockit-down ctx req)
+        (finally (nio-finz ctx))))))
+
+(defn- nio-presbody [ctx ev res]
+    (if (.isChunked res)
+      (debug "nio-presbody: response is chunked.")
+      (try
+        (nio-sockit-down ctx res)
+        (finally (nio-finz ctx)))))
+
+(defn- nio-pres [ctx ev res usercb]
+  (let [ s (.getStatus res)
+         r (.getReasonPhrase s)
+         c (.getCode s) ]
+    (debug "nio-pres: got a response: code " c " reason: " r)
+    (nio-cfgctx ctx { :dir -1 :info (nio-extract-res res) } usercb)
+    (cond
+      (and (>= c 200) (< c 300)) (nio-presbody ctx ev res)
+      (and (>= c 300) (< c 400)) (nio-perror ctx ev)
+      :else (nio-perror ctx,ev))))
+
+(defn- nio-chunk [ctx ev msg]
+  (try
+    (nio-sockit-down ctx msg)
+    (when (.isLast msg) (nio-pcomplete ctx ev msg))
+    (catch Throwable e#
+      (do (nio-finz ctx) (throw e#)))) )
+
+(defn mkchannelhdlr [usercb]
+  (proxy [ SimpleChannelHandler ] []
+
+    (exceptionCaught [_ ctx ev]
+      (let [ ch (.getChannel ctx) attObj (.getAttachment ch)
+             keepAlive (get attObj :keepAlive) ]
+        (.onerror usercb (.getCause ev))
+        (when-not keepAlive (.close ch))))
+
+    (messageReceived [ _ ctx ev ]
+      (let [ msg (.getMessage ev) ]
+        (cond
+          (instance? HttpResponse msg) (nio-pres ctx ev (cast HttpResponse msg) usercb)
+          (instance? HttpRequest msg) (nio-preq ctx ev (cast HttpRequest msg) usercb)
+          (instance? HttpChunk msg) (nio-chunk ctx ev (cast HttpChunk msg))
+          :else (throw (IOException. "Received some unknown object." ) ))))
+
+    ))
 
 (defn- mkpipelinefac [^SSLEngine ssleng usercb]
   (reify ChannelPipelineFactory
@@ -159,8 +282,10 @@
                     (if (.hasContent xdata)
                       (reply-get-vfile ctx ev xdata)
                       (reply-xxx ctx ev (HttpResponseStatus/NO_CONTENT))))) ]
-    (proxy XXX
-      (onReq [this ctx ev msg]
+    (reify NettyServiceIO
+      (onerror [this ctx ch exp] nil)
+      (onres [this ctx ch xdata] nil)
+      (onreq [this ctx ch xdata]
         (let [ mtd (-> msg (.getMethod) (.getName) (.toUpperCase))
                ch (.getChannel ctx)
                keepAlive (HttpHeaders/isKeepAlive req)

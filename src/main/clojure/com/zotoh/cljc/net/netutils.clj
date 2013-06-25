@@ -103,6 +103,11 @@
 
 (def ^:dynamic *socket-timeout* 5000)
 
+
+(defrecord HTTPMsgInfo
+  [ protocol is-chunked keep-alive clen headers
+    method uri params ])
+
 (defn- mkApacheClientHandle []
   (let [ cli (DefaultHttpClient.) pms (.getParams cli) ]
     (HttpConnectionParams/setConnectionTimeout pms *socket-timeout*)
