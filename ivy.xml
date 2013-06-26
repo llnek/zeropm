@@ -23,6 +23,7 @@
     <dependency org="org.clojure" name="data.codec" rev="0.1.0" conf="libjar->default"/>
     <dependency org="org.clojure" name="java.jdbc" rev="0.3.0-alpha4" conf="libjar->default"/>
     <dependency org="org.clojure" name="data.json" rev="0.2.2" conf="libjar->default"/>
+    <dependency org="expectations" name="expectations" rev="1.4.49" conf="libjar->default"/>
     <dependency org="org.clojure" name="clojure" rev="1.5.1" conf="libjar->default"/>
 
   </dependencies>
