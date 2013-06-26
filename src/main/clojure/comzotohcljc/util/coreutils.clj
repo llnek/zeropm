@@ -52,7 +52,7 @@
     (if (nil? cl) (.getContextClassLoader (Thread/currentThread)) cl )))
 
 (deftype NICHTS [])
-(def ^:dynamic *NICHTS* (->NICHTS ))
+(def ^:dynamic *NICHTS* (->NICHTS))
 
 (defn nil-nichts [obj] (if (nil? obj) *NICHTS* obj))
 
@@ -63,11 +63,11 @@
   (if (nil? setOfChars) false (contains? setOfChars ch)))
 
 (defn sysvar ^{ :doc "Get value for this system property." }
-  [v]
+  [^String v]
   (if (StringUtils/isEmpty v) nil (System/getProperty v)))
 
 (defn envvar ^{ :doc "Get value for this env var." }
-  [v]
+  [^String v]
   (if (StringUtils/isEmpty v) nil (System/getenv v)))
 
 (defn uid ^{ :doc "Generate a unique id using std java." }
@@ -78,38 +78,38 @@
   []
   (SecureRandom. (SecureRandom/getSeed 20)) )
 
-(defn now-jts ^{ :doc "Return a java sql Timestamp." } [] (Timestamp. (.getTime (Date.))))
+(defn now-jtstamp ^{ :doc "Return a java sql Timestamp." } [] (Timestamp. (.getTime (Date.))))
 
 (defn now-date ^{ :doc "Return a java Date." } [] (Date.) )
 
 (defn now-cal ^{ :doc "Return a Gregorian Calendar." } [] (GregorianCalendar. ))
 
 (defn to-charset ^{ :doc "Return a java Charset of the encoding." }
-  ([enc] (Charset/forName enc))
+  ([^String enc] (Charset/forName enc))
   ([] (to-charset "utf-8")) )
 
 (defmulti ^{ :doc "Convert the file path into nice format without backslashes."  } nice-fpath class)
 
 (defmethod nice-fpath String
-  [fpath]
-  (FilenameUtils/normalizeNoEndSeparator (nsb fpath) true) )
+  [^String fpath]
+  (FilenameUtils/normalizeNoEndSeparator (nsb fpath) true))
 
-(defmethod nice-fpath String
-  [aFile]
+(defmethod nice-fpath File
+  [^File aFile]
   (if (nil? aFile) "" (nice-fpath (.getCanonicalPath aFile)) ))
 
 (defn subs-var ^{ :doc "Replaces all system & env variables in the value." }
-  [value]
+  [^String value]
   (if (nil? value)
     ""
     (.replace (StrSubstitutor. (System/getenv)) (StrSubstitutor/replaceSystemProperties value))))
 
 (defn subs-svar ^{ :doc "Expand any sys-var found inside the string value." }
-  [value]
+  [^String value]
   (if (nil? value) "" (StrSubstitutor/replaceSystemProperties value)) )
 
 (defn subs-evar ^{ :doc "Expand any env-var found inside the string value." }
-  [value]
+  [^String value]
   (if (nil? value) "" (.replace (StrSubstitutor. (System/getenv)) value)) )
 
 (defn subs-props ^{ :doc "Expand any env & sys vars found inside the property values." }
