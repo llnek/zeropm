@@ -20,6 +20,7 @@
 
 (ns ^{ :doc "General file related utilities." :author "kenl" }
   com.zotoh.cljc.util.fileutils
+  (:use [clojure.tools.logging :only (info warn error debug)])  
   (:import (org.apache.commons.lang3 StringUtils))
   (:import (java.io
     File FileInputStream FileOutputStream

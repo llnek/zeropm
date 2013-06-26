@@ -103,10 +103,11 @@
 
 (def ^:dynamic *socket-timeout* 5000)
 
+(defrecord HTTPMsgInfo [protocol method uri is-chunked keep-alive clen headers params] )
 
-(defrecord HTTPMsgInfo
-  [ protocol is-chunked keep-alive clen headers
-    method uri params ])
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; internal functions to support apache http client.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn- mkApacheClientHandle []
   (let [ cli (DefaultHttpClient.) pms (.getParams cli) ]
@@ -115,7 +116,6 @@
     cli))
 
 (defn- get-bits [ent] (if (nil? ent) nil (EntityUtils/toByteArray ent)) )
-
 (defn- get-str [ent] (EntityUtils/toString ent "utf-8"))
 
 (defn- p-ok [rsp]
@@ -184,31 +184,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defrecord HTTPMsgInfo [method uri queryString headers])
-
-(defn make-msginfo ^{ :doc "" }
-  [method uri headers]
-  (let [ pos (.indexOf uri \?)
-         rc (if (> pos 0)
-              [ (.substring uri 0 pos) (.substring uri (inc pos)) ]
-              [ uri "" ]) ]
-    (->HTTPMsgInfo method (nth rc 0) (nth rc 1) headers)))
-
-(defprotocol HTTPMsgIO
-  (validateRequest [this ^HTTPMsgInfo ctx] )
-  (onOK [this ^HTTPMsgInfo ctx] )
-  (onError [this code reason] )
-  (configMsg! [this ^HttpMessage msg] )
-  (keepAlive [this] ))
-
-(deftype BasicHTTPMsgIO []
-  HTTPMsgIO
-  (onError [this code reason] (error "Error: status= " code " reason= " reason))
-  (onOK [this ctx] (XData.))
-  (keepAlive [this] false)
-  (configMsg! [this msg] nil)
-  (validateRequest [this ctx] true) )
 
 (defn make-simpleClientSSLEngine ^{ :doc "Simple minded, trusts everyone." }
   []
