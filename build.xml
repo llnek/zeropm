@@ -39,28 +39,28 @@
   <target name="compile_clj">
     <java classname="clojure.lang.Compile" fork="true" failonerror="true" maxmemory="2048m" classpathref="compile.path.id">
       <sysproperty key="clojure.compile.path" value="${build.dir}" />
-      <arg value="com.zotoh.cljc.util.byteutils" />
-      <arg value="com.zotoh.cljc.util.cmdlineseq" />
-      <arg value="com.zotoh.cljc.util.constants" />
-      <arg value="com.zotoh.cljc.util.coreutils" />
-      <arg value="com.zotoh.cljc.util.countrycode" />
-      <arg value="com.zotoh.cljc.util.dateutils" />
-      <arg value="com.zotoh.cljc.util.fileutils" />
-      <arg value="com.zotoh.cljc.util.guid" />
-      <arg value="com.zotoh.cljc.util.ioutils" />
-      <arg value="com.zotoh.cljc.util.metautils" />
-      <arg value="com.zotoh.cljc.util.procutils" />
-      <arg value="com.zotoh.cljc.util.seqnumgen" />
-      <arg value="com.zotoh.cljc.util.strutils" />
-      <arg value="com.zotoh.cljc.util.usastate" />
-      <arg value="com.zotoh.cljc.util.win32ini" />
-      <arg value="com.zotoh.cljc.i18n.i18nutils" />
-      <arg value="com.zotoh.cljc.net.netutils" />
-      <arg value="com.zotoh.cljc.netty.nettyio" />
-      <arg value="com.zotoh.cljc.crypto.cryptutils" />
-      <arg value="com.zotoh.cljc.crypto.cryptors" />
-      <arg value="com.zotoh.cljc.crypto.stores" />
-      <arg value="com.zotoh.blason.etc.core" />
+      <arg value="comzotohcljc.util.byteutils" />
+      <arg value="comzotohcljc.util.cmdlineseq" />
+      <arg value="comzotohcljc.util.constants" />
+      <arg value="comzotohcljc.util.coreutils" />
+      <arg value="comzotohcljc.util.countrycode" />
+      <arg value="comzotohcljc.util.dateutils" />
+      <arg value="comzotohcljc.util.fileutils" />
+      <arg value="comzotohcljc.util.guid" />
+      <arg value="comzotohcljc.util.ioutils" />
+      <arg value="comzotohcljc.util.metautils" />
+      <arg value="comzotohcljc.util.procutils" />
+      <arg value="comzotohcljc.util.seqnumgen" />
+      <arg value="comzotohcljc.util.strutils" />
+      <arg value="comzotohcljc.util.usastate" />
+      <arg value="comzotohcljc.util.win32ini" />
+      <arg value="comzotohcljc.i18n.i18nutils" />
+      <arg value="comzotohcljc.crypto.cryptutils" />
+      <arg value="comzotohcljc.crypto.cryptors" />
+      <arg value="comzotohcljc.crypto.stores" />
+      <arg value="comzotohcljc.net.netutils" />
+      <arg value="comzotohcljc.netty.nettyio" />
+      <arg value="comzotohcljc.blason.etc.core" />
     </java>
   </target>
 
