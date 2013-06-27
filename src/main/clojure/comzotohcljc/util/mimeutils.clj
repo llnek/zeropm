@@ -29,6 +29,7 @@
   (:import (java.util Properties))
   (:import (javax.mail Message))
   (:require [comzotohcljc.util.coreutils :as CU])
+  (:require [comzotohcljc.util.metautils :as MU])
   (:require [comzotohcljc.util.strutils :as SU])
   (:require [comzotohcljc.util.ioutils :as IO])
   )
@@ -111,39 +112,43 @@
 
 
 (def ^:private _extRegex (Pattern/compile "^.*\\.([^.]+)$"))
-(def ^:private _mime_cache (atom (Properties.)))
+(def ^:private _mime_cache (atom {}))
 
 (defn- is-pkcs7mime? "" [s] (>= (.indexOf s "application/x-pkcs7-mime") 0))
-(defn- mime-cache "" [] @_mime_cache)
+
+
+(defn mime-cache { :doc "" }
+  []
+  @_mime_cache)
 
 (defn get-charset ^{ :doc "Get charset from this content-type string." }
-  [cType]
+  [^String cType]
   (let [ pos (-> (SU/nsb cType) (.toLowerCase) (.indexOf "charset="))
        ;;rc "ISO-8859-1"
          rc "utf-8" ]
     (if (> pos 0)
       (let [ s (.substring cType (+ pos 8)) p (StringUtils/indexOfAny s "; \t\r\n") ]
-        (if (> pos 0) (.substring s 0 p) rc))
+        (if (> p 0) (.substring s 0 p) s))
       rc)) )
 
 (defn is-signed? ^{ :doc "Returns true if this content-type indicates signed." }
-  [cType]
+  [^String cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (or (>= (.indexOf ct "multipart/signed") 0)
         (and (is-pkcs7mime? ct) (>= (.indexOf ct "signed-data") 0)))) )
 
 (defn is-encrypted? ^{ :doc "Returns true if this content-type indicates encrypted." }
-  [cType]
+  [^String cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (and (is-pkcs7mime? ct) (>= (.indexOf ct "enveloped-data") 0))) )
 
 (defn is-compressed? ^{ :doc "Returns true if this content-type indicates compressed." }
-  [cType]
+  [^String cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (and (>= (.indexOf ct "application/pkcs7-mime") 0) (>= (.indexOf ct "compressed-data") 0))) )
 
 (defn is-mdn? ^{ :doc "Returns true if this content-type indicates MDN." }
-  [cType]
+  [^String cType]
   (let [ ct (.toLowerCase (SU/nsb cType)) ]
     (and (>= (.indexOf ct "multipart/report") 0) (>= (.indexOf ct "disposition-notification") 0))) )
 
@@ -152,11 +157,11 @@
   (cond
     (instance? String obj) (IO/streamify (CU/bytesify (cast String obj)))
     (instance? InputStream obj) (cast InputStream obj)
-    (instance? bytes obj) (IO/streamify (cast bytes obj))
+    (instance? (MU/bytes-class) obj) (IO/streamify obj)
     :else nil))
 
 (defn url-decode  ^{ :doc "URL decode this string." }
-  [u]
+  [^String u]
   (if (nil? u)
     nil
     (try
@@ -164,7 +169,7 @@
       (catch Throwable e nil))))
 
 (defn url-encode ^{ :doc "URL encode this string." }
-  [u]
+  [^String u]
   (if (nil? u)
     nil
     (try
@@ -172,26 +177,26 @@
       (catch Throwable e nil))))
 
 (defn guess-mimetype ^{ :doc "Guess the MIME type of file." }
-  ([file] (guess-mimetype file ""))
-  ([file dft]
+  ([^File file] (guess-mimetype file ""))
+  ([^File file ^String dft]
     (let [ mc (.matcher _extRegex (.toLowerCase (.getName file)))
            ex (if (.matches mc) (.group mc 1) "")
-           p (SU/nsb (.getProperty (mime-cache) ex)) ]
+           p (SU/nsb (get (mime-cache) ex)) ]
       (if (SU/hgl? p) p dft))) )
 
 (defn guess-contenttype ^{ :doc "Guess the content-type of file." }
-  ([file] (guess-contenttype file "utf-8" "application/octet-stream" ))
-  ([file enc dft]
+  ([^File file] (guess-contenttype file "utf-8" "application/octet-stream" ))
+  ([^File file ^String enc ^String dft]
     (let [ mt (guess-mimetype file)
            ct (if (SU/hgl? mt) mt dft) ]
       (if (not (.startsWith ct "text/")) ct (str ct "; charset=" enc)))) )
 
-(defn setup-cache  ^{ :doc "Load file mime-types as properties." }
-  [fileUrl]
+(defn setup-cache  ^{ :doc "Load file mime-types as a map." }
+  [^URL fileUrl]
   (with-open [ inp (.openStream fileUrl) ]
     (let [ ps (Properties.) ]
       (.load ps inp)
-      (swap! _mime_cache ps))))
+      (reset! _mime_cache (CU/into-map ps)))))
 
 
 

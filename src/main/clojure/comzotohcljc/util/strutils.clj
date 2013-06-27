@@ -18,8 +18,7 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns ^{ :doc "String utilities."
-       :author "kenl" }
+(ns ^{ :doc "String utilities." :author "kenl" }
   comzotohcljc.util.strutils
   (:import (org.apache.commons.lang3 StringUtils))
   (:import (java.io CharArrayWriter File
@@ -31,7 +30,7 @@
   )
 
 (defn has? ^{ :doc "Returns true if this character is inside this string." }
-  [aStr ch]
+  [^String aStr ch]
   (do
     (>= (.indexOf aStr (int ch)) 0)))
 
@@ -44,7 +43,7 @@
   (if (nil? obj) "(null)" (.toString obj)))
 
 (defn same? ^{ :doc "Returns true if these 2 strings are the same." }
-  [a b]
+  [^String a ^String b]
   (cond
     (and (nil? a) (nil? b)) true
     (or (nil? a) (nil? b)) false
@@ -52,15 +51,15 @@
     :else (Arrays/equals (.toCharArray a) (.toCharArray b)) ) )
 
 (defn hgl? ^{ :doc "Returns true if this string is not empty." }
-  [s]
+  [^String s]
   (if (nil? s) false (> (.length s) 0)))
 
 (defn strim ^{ :doc "Safely trim this string - handles null." }
-  [s]
+  [^String s]
   (if (nil? s) "" (.trim s)))
 
 (defn add-delim! ^{ :doc "Append to a string-builder, optionally inserting a delimiter if the buffer is not empty." }
-  [buf delim item]
+  [^StringBuilder buf ^String delim ^String item]
   (do
     (when-not (nil? item)
       (when (and (> (.length buf) 0) (not (nil? delim)))
@@ -69,7 +68,7 @@
     buf))
 
 (defn splunk ^{ :doc "Split a large string into chucks, each chunk having a specific length." }
-  [largeString chunkLength]
+  [^String largeString ^long chunkLength]
   (if (nil? largeString)
     []
     (loop [ ret [] src largeString ]
@@ -81,40 +80,40 @@
 (defn- ucs [s] (.toUpperCase s))
 
 (defn hasic-any? ^{ :doc "Tests String.indexOf() against a list of possible args. (ignoring case)." }
-  [src substrs]
+  [^String src substrs]
   (if (nil? src)
     false
-    (some #(>= (.indexOf (lcs src) (lcs %)) 0) substrs)))
+    (if (some #(>= (.indexOf (lcs src) (lcs %)) 0) substrs) true false)))
 
 (defn has-any? ^{ :doc "Returns true if src contains one of these substrings." }
-  [src substrs]
+  [^String src substrs]
   (if (nil? src)
     false
-    (some #(>= (.indexOf src %) 0) substrs)))
+    (if (some #(>= (.indexOf src %) 0) substrs) true false)))
 
 (defn swic-any? ^{ :doc "Tests startsWith (ignore-case)." }
-  [src pfxs]
+  [^String src pfxs]
   (if (nil? src)
     false
-    (some #(.startsWith (lcs src) (lcs %)) pfxs)))
+    (if (some #(.startsWith (lcs src) (lcs %)) pfxs) true false)))
 
 (defn sw-any? ^{ :doc "Tests startWith(), looping through the list of possible prefixes." }
-  [src pfxs]
+  [^String src pfxs]
   (if (nil? src)
     false
-    (some #(.startsWith src %) pfxs)) )
+    (if (some #(.startsWith src %) pfxs) true false)))
 
 (defn eqic-any? ^{ :doc "Tests String.equals() against a list of possible args. (ignore-case)." }
-  [src strs]
+  [^String src strs]
   (if (nil? src)
     false
-    (some #(.equalsIgnoreCase src %) strs)) )
+    (if (some #(.equalsIgnoreCase src %) strs) true false)))
 
 (defn eq-any? ^{ :doc "Tests String.equals() against a list of possible args." }
-  [src strs]
+  [^String src strs]
   (if (nil? src)
     false
-    (some #(.equals src %) strs)))
+    (if (some #(.equals src %) strs) true false)))
 
 (defn make-string ^{ :doc "Make a string of contain length." }
   [ch times]
@@ -124,13 +123,13 @@
     (.toString buf)) )
 
 (defn right ^{ :doc "Gets the rightmost len characters of a String." }
-  [src len]
+  [^String src len]
   (if (nil? src)
     ""
     (StringUtils/right src len)) )
 
 (defn left ^{ :doc "Gets the leftmost len characters of a String." }
-  [src len]
+  [^String src len]
   (if (nil? src)
     ""
     (StringUtils/left src len)) )

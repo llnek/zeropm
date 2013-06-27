@@ -34,37 +34,37 @@
   )
 
 (defn file-readwrite? ^{ :doc "Returns true if file is readable & writable." }
-  [fp]
+  [^File fp]
   (if (and (not (nil? fp)) (.exists fp) (.isFile fp) (.canRead fp) (.canWrite fp))
     true
     false) )
 
 (defn file-read? ^{ :doc "Returns true if file is readable." }
-  [fp]
+  [^File fp]
   (if (and (not (nil? fp)) (.exists fp) (.isFile fp) (.canRead fp))
     true
     false) )
 
 (defn dir-readwrite? ^{ :doc "Returns true if directory is readable and writable." }
-  [dir]
+  [^File dir]
   (if (and (not (nil? dir)) (.exists dir) (.isDirectory dir) (.canRead dir) (.canWrite dir) )
     true
     false) )
 
 (defn dir-read? ^{ :doc "Returns true if directory is readable." }
-  [dir]
+  [^File dir]
   (if (and (not (nil? dir)) (.exists dir) (.isDirectory dir) (.canRead dir) )
     true
     false) )
 
 (defn can-exec? ^{ :doc "Returns true if file or directory is executable." }
-  [fp]
+  [^File fp]
   (if (and (not (nil? fp)) (.exists fp) (.canExecute fp))
     true
     false) )
 
 (defn parent-path ^{ :doc "Get the path to the parent directory." }
-  [path]
+  [^String path]
   (if (StringUtils/isEmpty path)
     path
     (.getParent (File. path))) )

@@ -30,19 +30,19 @@
   )
 
 (defn to-bytes ^{ :doc "Convert char[] to byte[]." }
-  [ chArray charSetObj ]
+  [^chars chArray ^Charset charSetObj]
   (.array (.encode charSetObj (CharBuffer/wrap chArray)) ) )
 
 (defn to-chars ^{ :doc "Convert byte[] to char[]." }
-  [ byteArray charSetObj ]
+  [^bytes byteArray ^Charset charSetObj]
   (.array (.decode charSetObj (ByteBuffer/wrap byteArray)) ) )
 
 (defn read-long ^{ :doc "Return a long by scanning the byte[]." }
-  [ byteArray ]
+  [^bytes byteArray]
   (.readLong (DataInputStream. (ByteArrayInputStream. byteArray)) ))
 
 (defn read-int ^{ :doc "Return an int by scanning the byte[]." }
-  [ byteArray ]
+  [^bytes byteArray]
   (.readInt (DataInputStream. (ByteArrayInputStream. byteArray)) ))
 
 (defmulti ^{ :doc "Write this long value out as byte[]." } write-bytes class)
