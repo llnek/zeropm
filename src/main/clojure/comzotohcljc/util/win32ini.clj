@@ -20,11 +20,13 @@
 (ns ^{ :doc "Functions to load and query a .ini file." :author "kenl" }
   comzotohcljc.util.win32ini
   (:import (org.apache.commons.lang3 StringUtils))
-  (:import (java.io File IOException
-    FileReader LineNumberReader PrintStream))
+  (:import (java.net URL))
+  (:import (java.io File IOException InputStreamReader
+    LineNumberReader PrintStream))
   (:import (com.zotoh.frwk.util NCMap))
   (:import (java.util LinkedHashMap))
   (:require [ comzotohcljc.util.coreutils :as CU ] )
+  (:require [ comzotohcljc.util.fileutils :as FU ] )
   (:require [ comzotohcljc.util.strutils :as SU ] )
   )
 
@@ -41,9 +43,8 @@
   (optBool [this sectionName property] )
   (optDouble [this sectionName property] ) )
 
-(defn- throwBadIni
-  [rdr]
-  (throw (IOException. (str "Bad ini line: " (.getLineNumber rdr)))))
+(defn- throwBadIni [rdr] (throw (IOException. (str "Bad ini line: " (.getLineNumber rdr)))))
+(defn- throwBadKey [k] (throw (Exception. (str "No such property " k "."))))
 
 (defn- maybeSection
   [rdr ncmap line]
@@ -71,16 +72,13 @@
       )) )
 
 (defn- parseIniFile
-  [iniFilePath]
-  (let [ rdr (LineNumberReader. (FileReader. iniFilePath)) ncmap (NCMap.) ]
+  [fUrl]
+  (with-open [ inp (.openStream fUrl) ]
+    (let [ rdr (LineNumberReader. (InputStreamReader. inp "utf-8")) ncmap (NCMap.) ]
     (loop [ curSec "" line (.readLine rdr)  ]
       (if (nil? line)
         ncmap
-        (recur (evalOneLine rdr ncmap line curSec) (.readLine rdr) )))) )
-
-(defn- throwBadKey
-  [k]
-  (throw (Exception. (str "No such property " k "."))))
+        (recur (evalOneLine rdr ncmap line curSec) (.readLine rdr) )))) ))
 
 (defn- hasKV
   [m k]
@@ -95,7 +93,11 @@
       (.get mp k))) )
 
 (deftype Win32Conf [mapOfSections] IWin32Conf
-  (getSectionAsMap [this sectionName] (if (nil? sectionName) nil (.get mapOfSections sectionName) ))
+  (getSectionAsMap [this sectionName] 
+    (if (nil? sectionName)
+      nil
+      (let [ m (.get mapOfSections sectionName) ]
+        (if (nil? m) nil (into {} m)))))     
   (sectionKeys [this] (.keySet mapOfSections))
   (getString [this section property]
     (let [ v (getKV this section property true) ]
@@ -130,14 +132,25 @@
         (println))))
 )
 
+(defmulti ^{ :doc "Parse a INI config file, returning a Win32Conf object." } parse-inifile class)
 
-(defn parseConf
-  "Parse a INI config file, returning a Win32Conf object."
-  [iniFilePath]
-  (if (StringUtils/isEmpty iniFilePath)
+(defmethod parse-inifile String
+  [^String fpath]
+  (if (nil? fpath)
     nil
-    (let [ ncmap (parseIniFile iniFilePath) ]
-      (Win32Conf. ncmap))))
+    (parse-inifile (File. fpath))))
+  
+(defmethod parse-inifile File
+  [^File file]
+  (if (or (nil? file) (not (FU/file-read? file)))
+    nil
+    (parse-inifile (.toURL (.toURI file)))))
+
+(defmethod parse-inifile URL
+  [^URL fileUrl]
+  (if (nil? fileUrl) 
+    nil
+    (Win32Conf. (parseIniFile fileUrl))))
 
 
 

@@ -22,26 +22,26 @@
   comzotohcljc.i18n.i18nutils
   (:import (java.util PropertyResourceBundle ResourceBundle Locale))
   (:import (org.apache.commons.lang3 StringUtils))
-  (:import (java.io FileInputStream))
+  (:import (java.io File FileInputStream))
   (:require [ comzotohcljc.util.metautils :as MU])
   (:require [ comzotohcljc.util.coreutils :as CU])
   (:require [ comzotohcljc.util.strutils :as SU])
   )
 
 (defn load-resbundle ^{ :doc "Load a properties file containing localized string." }
-  [aFile]
+  [^File aFile]
   (do
     (with-open [ inp (FileInputStream. aFile) ]
       (PropertyResourceBundle. inp))) )
 
 (defn get-resbundle ^{ :doc "Return a resource bundle." }
-  [baseName locale cl]
+  [^String baseName ^Locale locale ^ClassLoader cl]
   (if (or (nil? baseName)(nil? locale))
     nil
     (ResourceBundle/getBundle baseName locale (MU/get-cldr cl))) )
 
 (defn get-string ^{ :doc "Return the string value for this key, pms may contain values for positional substitutions." }
-  [bundle pkey pms]
+  [^ResourceBundle bundle ^String pkey pms]
   (let [ kv (SU/nsb (.getString bundle pkey)) ]
     (if (empty? pms)
       kv

@@ -75,8 +75,8 @@
   (.replaceAll (.toString (UID.)) "[:\\-]+" ""))
 
 (defn new-random ^{ :doc "Return a new random object." }
-  []
-  (SecureRandom. (SecureRandom/getSeed 20)) )
+  ([] (new-random 4))
+  ([numBytes] (SecureRandom. (SecureRandom/getSeed numBytes)) ))
 
 (defn now-jtstamp ^{ :doc "Return a java sql Timestamp." } [] (Timestamp. (.getTime (Date.))))
 

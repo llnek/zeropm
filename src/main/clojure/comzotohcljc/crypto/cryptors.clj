@@ -41,10 +41,16 @@
   (:require [ comzotohcljc.util.strutils :as SU])
   )
 
+(def ^:private VISCHS
+  (.toCharArray (str " @N/\\Ri2}aP`(xeT4F3mt;8~%r0v:L5$+Z{'V)\"CKI_c>z.*"
+       "fJEwSU7juYg<klO&1?[h9=n,yoQGsW]BMHpXb6A|D#q^_d!-")))
+(def ^:private VISCHS_LEN (alength VISCHS))
+
 ;;(def ^:private PCHS "abcdefghijklmnopqrstuvqxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`1234567890-_~!@#$%^&*()" )
 (def ^:private PCHS "Ha$4Jep8!`g)GYkmrIRN72^cObZ%oXlSPT39qLMD&iC*UxKWhE#F5@qvV6j0f1dyBs-~tAQn(z_u" )
 ;;(def ^:private ACHS "abcdefghijklmnopqrstuvqxyz1234567890-_ABCDEFGHIJKLMNOPQRSTUVWXYZ" )
 (def ^:private ACHS "nhJ0qrIz6FmtPCduWoS9x8vT2-KMaO7qlgApVX5_keyZDjfE13UsibYRGQ4NcLBH" )
+
 (def ^:private s_asciiChars (.toCharArray ACHS))
 (def ^:private s_pwdChars (.toCharArray PCHS))
 
@@ -73,64 +79,65 @@
 (defprotocol BaseCryptor
   (decrypt [ this pwdStr cipherText] [ this cipherText] )
   (encrypt [ this pwdStr clearText] [ this clearText] )
-  (algo [this] )
-  )
+  (algo [this] ))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; caesar cipher
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- shiftRight [width delta c head tail]
-  (let [ ch  (+ c delta) ]
-    (if (> ch tail)
-      (char (- ch width))
-      (char ch))) )
+(defn- identify-ch [pos] (aget VISCHS pos))
 
-(defn- shiftLeft [width delta c head tail]
-  (let [ ch (- c delta) ]
-    (if (< ch head)
-      (char (+ ch width))
-      (char ch))) )
+(defn- locate-ch [ch]
+  (let [ idx (some (fn [i] (if (= ch (aget VISCHS i)) i nil)) (range VISCHS_LEN)) ]
+    (if (nil? idx) -1 idx)))
 
-(defn- shift-enc [shiftpos delta ch headch tailch]
-  (if (> shiftpos 0)
-    (shiftRight ALPHA_CHS delta (int ch) (int headch) (int tailch))
-    (shiftLeft ALPHA_CHS delta (int ch) (int headch) (int tailch))) )
+(defn- slide-forward [delta cpos]
+  (let [ ptr (+ cpos delta)
+         np (if (>= ptr VISCHS_LEN) (- ptr VISCHS_LEN) ptr) ]
+    (identify-ch np)))
 
-(defn- shift-dec [shiftpos delta ch headch tailch]
+(defn- slide-back [delta cpos]
+  (let [ ptr (- cpos delta)
+         np (if (< ptr 0) (+ VISCHS_LEN ptr) ptr) ]
+    (identify-ch np)))
+
+(defn- shiftenc [shiftpos delta cpos]
   (if (< shiftpos 0)
-    (shiftRight ALPHA_CHS delta (int ch) (int headch)  (int tailch))
-    (shiftLeft ALPHA_CHS delta  (int ch)  (int headch)  (int tailch)) ))
+    (slide-forward delta cpos)
+    (slide-back delta cpos)))
 
-(defn caesarEncode ^{ :doc "" }
-  [text shiftpos]
-  (if (or (= shiftpos 0) (StringUtils/isEmpty text))
-    text
-    (let [ delta (mod (math/abs shiftpos) ALPHA_CHS)
-           ca (.toCharArray text)
-           ;;out = java.util.Arrays.copyOf(ca, ca.length)
-           ;;out (.clone ca)
-           out (amap ^chars ca pos ret
-                  (let [ ch (aget ^chars ca pos) ]
-                    (cond
-                      (and (>= (int ch) (int \A)) (<= (int ch) (int \Z))) (shift-enc shiftpos delta ch \A \Z)
-                      (and (>= (int ch) (int \a)) (<= (int ch) (int \z))) (shift-enc shiftpos delta ch \a \z)
-                      :else ch))) ]
-      (String. out))) )
+(defn- shiftdec [shiftpos delta cpos]
+  (if (< shiftpos 0)
+    (slide-back delta cpos))
+    (slide-forward delta cpos) )
 
-(defn caesarDecode ^{ :doc "" }
-  [text shiftpos]
-  (if (or (= shiftpos 0) (StringUtils/isEmpty text))
+(defn caesar-encrypt ^{ :doc "Encrypt clear text by character rotation." }
+  [^String text ^long shiftpos]
+  (if (or (StringUtils/isEmpty text) (= shiftpos 0))
     text
-    (let [ delta (mod (math/abs shiftpos) ALPHA_CHS)
+    (let [ delta (mod (math/abs shiftpos) VISCHS_LEN)
            ca (.toCharArray text)
            out (amap ^chars ca pos ret
-                  (let [ ch (aget ^chars ca pos) ]
-                    (cond
-                      (and (>= (int ch) (int \A)) (<= (int ch) (int \Z))) (shift-dec shiftpos delta ch \A \Z)
-                      (and (>= (int ch) (int \a)) (<= (int ch) (int \z))) (shift-dec shiftpos delta ch \a \z)
-                      :else ch))) ]
-      (String. out))) )
+                  (let [ ch (aget ^chars ca pos)
+                         p (locate-ch ch) ]
+                    (if (< p 0)
+                      ch
+                      (shiftenc shiftpos delta p)))) ]
+      (String. out))))
+
+(defn caesar-decrypt ^{ :doc "Decrypt text which was encrypted by the caesar method." }
+  [^String text ^long shiftpos]
+  (if (or (StringUtils/isEmpty text) (= shiftpos 0))
+    text
+    (let [ delta (mod (math/abs shiftpos) VISCHS_LEN)
+           ca (.toCharArray text)
+           out (amap ^chars ca pos ret
+                  (let [ ch (aget ^chars ca pos)
+                         p (locate-ch ch) ]
+                    (if (< p 0)
+                      ch
+                      (shiftdec shiftpos delta p)))) ]
+      (String. out))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; jasypt cryptor
@@ -205,7 +212,8 @@
       (ensure-key-size pwdStr (.algo this))
       (jcEncr pwdStr clearText (.algo this))) )
   (algo [this] T3_DES) )
-
+;;PBEWithMD5AndDES
+;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; BC cryptor
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -275,9 +283,6 @@
                             (aget chArray n))) ]
             (String. rc))) )
 
-(defn createRandom "" [len] (createXXX len s_asciiChars))
-(defn createStrong "" [len] (createXXX len s_pwdChars))
-
 (deftype Password [pwdStr]
   Object
   (equals [this obj] (and (instance? Password obj) (= (.pwdStr this) (.pwdStr obj))) )
@@ -292,13 +297,20 @@
         (str PWD_PFX s))))
   (text [this] (SU/nsb pwdStr)))
 
-(defn createPassword ^{ :doc "Create a password object." }
+(defn create-password ^{ :doc "Create a password object." }
   [pwdStr]
   (cond
     (StringUtils/isEmpty pwdStr) (Password. "")
     (.startsWith pwdStr PWD_PFX) (let [ cr (JasyptCryptor.) s (.decrypt cr (.substring pwdStr PWD_PFXLEN)) ] (Password. s))
     :else (Password. pwdStr)) )
 
+(defn create-random-string ^{ :doc "" }
+  [len]
+  (createXXX len s_asciiChars))
+
+(defn create-strong-pwd ^{ :doc "" }
+  [len]
+  (create-password (createXXX len s_pwdChars)))
 
 
 

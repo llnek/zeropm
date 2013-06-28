@@ -81,11 +81,11 @@
   (keys _CCODES))
 
 (defn find-state ^{ :doc "Return the full state name." }
-  [code]
+  [^String code]
   (_CCODES (.toUpperCase code)))
 
 (defn find-code ^{ :doc "Return the abbreviated state code." }
-  [state]
+  [^String state]
   (let [ rs (filter #(= (nth % 1) state) _CCODESEQ) ]
       (if (nil? rs) nil (nth (first rs) 0))))
 

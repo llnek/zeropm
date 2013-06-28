@@ -260,7 +260,7 @@
 
 
 (defn find-country ^{ :doc "Return the full country name." }
-  [code]
+  [^String code]
   (_CCODES (.toUpperCase code)))
 
 (defn list-codes ^{ :doc "List all the country codes." }
@@ -268,11 +268,11 @@
   (keys _CCODES))
 
 (defn usa? ^{ :doc "Returns true if the code is US." }
-  [code]
+  [^String code]
   (= "US" (.toUpperCase code)))
 
 (defn find-code ^{ :doc "Return the country code." }
-  [country]
+  [^String country]
   (let [ rs (filter #(= (nth % 1) country) _CCODESEQ) ]
     (if (nil? rs) nil (nth (first rs) 0))))
 

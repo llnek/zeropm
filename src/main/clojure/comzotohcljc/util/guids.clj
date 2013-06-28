@@ -19,7 +19,7 @@
 ;;
 
 (ns ^{ :doc "Ways to generate an unique id." :author "kenl" }
-  comzotohcljc.util.guid
+  comzotohcljc.util.guids
   (:import (java.net InetAddress) )
   (:import (java.lang StringBuilder) )
   (:import (java.lang Math) )
@@ -29,13 +29,12 @@
   (:require [ comzotohcljc.util.seqnumgen :as SQ ] )
   )
 
-(defmulti ^:private fmtXXX  class)
+;;(def ^:private  _CHARS (.toCharArray "0123456789AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz"))
+(def ^:private  _CHARS (.toCharArray "YcQnPuzVAvpi7taGj1XwoJbIK3smye96NlHrR2DZS0CUxkLF5O4g8fBTqMEdhW"))
+(def ^:private  _UUIDLEN 36)
 
-(defn- splitHiLoTime
-  []
-  (let [ s (fmtXXX (CU/now-millis))
-         n (.length s) ]
-    [ (SU/left s (/ n 2)) (SU/right s (max 0 (- n (/ n 2 )) )) ] ))
+(def ^:private LONG_MASK "0000000000000000")
+(def ^:private INT_MASK "00000000")
 
 (defn- fmt [pad mask]
   (let [ mlen (.length mask) plen (.length pad) ]
@@ -43,19 +42,12 @@
       (.substring mask 0 plen)
       (.toString (.replace (StringBuilder. pad) (- plen mlen) plen mask ) ))) )
 
+(defn- fmt-int [num] (fmt INT_MASK (Integer/toHexString num)))
+(defn- fmt-long [num] (fmt LONG_MASK (Long/toHexString num)))
 
-(defmethod ^:private fmtXXX Long
-  [num]
-    (fmt "0000000000000000"  (Long/toHexString num)) )
-
-(defmethod ^:private  fmtXXX Integer
-  [num]
-    (fmt "00000000"  (Integer/toHexString num)) )
-
-
-;;(def ^:private  _CHARS (.toCharArray "0123456789AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz"))
-(def ^:private  _CHARS (.toCharArray "YcQnPuzVAvpi7taGj1XwoJbIK3smye96NlHrR2DZS0CUxkLF5O4g8fBTqMEdhW"))
-(def ^:private  _UUIDLEN 36)
+(defn- splitHiLoTime []
+  (let [ s (fmt-long (CU/now-millis)) n (.length s) ]
+    [ (SU/left s (/ n 2)) (SU/right s (max 0 (- n (/ n 2 )) )) ] ))
 
 (defn- maybeSetIP []
   (try
@@ -85,7 +77,7 @@
   []
   (let [ seed (.nextInt (CU/new-random) (Integer/MAX_VALUE))
          ts (splitHiLoTime) ]
-      (str (nth ts 0) (fmtXXX _IP) (fmtXXX seed) (fmtXXX (SQ/next-int)) (nth ts 1)) ))
+      (str (nth ts 0) (fmt-long _IP) (fmt-int seed) (fmt-int (SQ/next-int)) (nth ts 1)) ))
 
 
 (def ^:private guid-eof  nil)
