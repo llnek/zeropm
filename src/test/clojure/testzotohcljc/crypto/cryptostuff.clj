@@ -20,13 +20,24 @@
 
 (ns testzotohcljc.crypto.cryptostuff
   (:use [clojure.test])
+  (:import (java.security Policy KeyStore SecureRandom))
+  (:import (java.util Date GregorianCalendar))
   (:require [comzotohcljc.crypto.cryptors :as RT])
   (:require [comzotohcljc.crypto.stores :as ST])
+  (:require [comzotohcljc.util.coreutils :as CU])
+  (:require [comzotohcljc.util.ioutils :as IO])
   (:require [comzotohcljc.crypto.cryptutils :as RU])
   )
 
-(deftest test-cryptostuff-module
+(def ^:private ROOTPFX (CU/rc-bytes "com/zotoh/frwk/crypto/test.pfx"))
+(def ^:private ENDDT (.getTime (GregorianCalendar. 2050 1 1)))
+(def ^:private TESTPWD "secretsecretsecretsecretsecret")
 
+(def ^:private ROOTCS 
+  (comzotohcljc.crypto.stores.CryptoStore. 
+                        (RU/init-store! (RU/get-pkcsStore) ROOTPFX "helpme") "helpme"))
+
+(deftest test-cryptostuff-module
 
 (is (not (= "heeloo, how are you?" (RT/caesar-decrypt (RT/caesar-encrypt "heeloo, how are you?" 709394) 666))))
 (is (= "heeloo, how are you?" (RT/caesar-decrypt (RT/caesar-encrypt "heeloo, how are you?" 709394) 709394)))
@@ -41,19 +52,59 @@
                       (.decrypt c (.encrypt c "heeloo")))))
 
 (is (= "heeloo" (let [ c (comzotohcljc.crypto.cryptors.JavaCryptor.) ]
-                      (.decrypt c "secret" (.encrypt c "secret" "heeloo")))))
+                      (.decrypt c TESTPWD (.encrypt c TESTPWD "heeloo")))))
 
 (is (= "heeloo" (let [ c (comzotohcljc.crypto.cryptors.BouncyCryptor.) ]
                       (.decrypt c (.encrypt c "heeloo")))))
 
 (is (= "heeloo" (let [ c (comzotohcljc.crypto.cryptors.BouncyCryptor.) ]
-                      (.decrypt c "secret" (.encrypt c "secret" "heeloo")))))
+                      (.decrypt c TESTPWD (.encrypt c TESTPWD "heeloo")))))
 
-(is (= .(length (.text (create-strong-pwd 16))) 16))
-(is (= .(length (create-random-string 64)) 64))
+(is (= (.length (.text (RT/create-strong-pwd 16))) 16))
+(is (= (.length (RT/create-random-string 64)) 64))
 
-(is (instance? comzotohcljc.crypto.cryptors.Password (create-password "secret-text")))
-(is (.startsWith (.encoded (create-password "secret-text")) "CRYPT:"))
+(is (instance? comzotohcljc.crypto.cryptors.Password (RT/create-password "secret-text")))
+(is (.startsWith (.encoded (RT/create-password "secret-text")) "CRYPT:"))
+
+
+(is (= "SHA-512" (.getAlgorithm (RU/make-MsgDigest RU/*SHA_512*))))
+(is (= "MD5" (.getAlgorithm (RU/make-MsgDigest RU/*MD_5*))))
+
+(is (> (RU/next-serial) 0))
+
+(is (instance? SecureRandom (RU/get-srand)))
+
+(is (> (.length (RU/new-alias)) 0))
+
+(is (= "PKCS12" (.getType (RU/get-pkcsStore))))
+(is (= "JKS" (.getType (RU/get-jksStore))))
+
+(is (instance? Policy (RU/make-easyPolicy)))
+
+(is (> (.length (RU/gen-mac (CU/bytesify "secret") "heeloo world")) 0))
+(is (> (.length (RU/gen-hash "heeloo world")) 0))
+
+(is (not (nil? (RU/make-keypair "RSA" 1024))))
+
+(is (let [ v (RU/make-csrreq 1024 "C=AU,ST=NSW,L=Sydney,O=Google,OU=HQ,CN=www.google.com" "PEM") ]
+          (and (= (.size v) 2) (> (alength (first v)) 0) (> (alength (nth v 1)) 0))) )
+
+(is (let [ fout (IO/make-tmpfile)]
+      (RU/make-ssv1PKCS12 (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024 fout)
+      (> (.length fout) 0)))
+
+(is (let [ fout (IO/make-tmpfile) ]
+      (RU/make-ssv1JKS (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024 fout)
+            (> (.length fout) 0)))
+
+(is (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
+       fout (IO/make-tmpfile)
+       pk (.getPrivateKey pke)
+       cs (.getCertificateChain pke) ]
+            (RU/make-ssv3PKCS12 (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024  cs pk fout)
+              (> (.length fout) 0)))
+
+
 
 
 )

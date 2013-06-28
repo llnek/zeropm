@@ -169,15 +169,6 @@
 (def ^:private DEF_ALGO "SHA1WithRSAEncryption")
 (def ^:private DEF_MAC "HmacSHA512")
 
-(defn make-MsgDigest ^{ :doc "" }
-  [algo]
-  (MessageDigest/getInstance (SU/nsb algo)))
-
-(defn next-serial ^{ :doc "" }
-  []
-  (let [ r (Random. (.getTime (Date.))) ]
-    (BigInteger/valueOf (math/abs (.nextLong r)))) )
-
 (defn assert-jce ^{ :doc "this function should fail if the non-restricted (unlimited-strength) jce files are not placed in jre-home" }
   []
   (let [ kgen (KeyGenerator/getInstance *BFISH*)
@@ -198,6 +189,15 @@
                     "x-java-content-handler=org.bouncycastle.mail.smime.handlers.x_pkcs7_mime"))
          (.addMailcap mc (str "multipart/signed;; "
                   "x-java-content-handler=org.bouncycastle.mail.smime.handlers.multipart_signed") )))
+
+(defn make-MsgDigest ^{ :doc "" }
+  [^String algo]
+  (MessageDigest/getInstance (SU/nsb algo) *BCProvider*))
+
+(defn next-serial ^{ :doc "" }
+  []
+  (let [ r (Random. (.getTime (Date.))) ]
+    (BigInteger/valueOf (math/abs (.nextLong r)))) )
 
 (defn dbg-provider ^{ :doc "" }
   [^PrintStream os]
@@ -239,7 +239,7 @@
     store))
 
 (defmethod init-store! :bytes [^KeyStore store ^bytes bits pwdObj]
-  (init-store! (IO/streamify bits) pwdObj))
+  (init-store! store (IO/streamify bits) pwdObj))
 
 (defmethod init-store! :file [^KeyStore store ^File f pwdObj]
   (with-open [ inp (FileInputStream. f) ]
@@ -256,11 +256,11 @@
             (recur rc)))))))
 
 (defn cert-aliases ^{ :doc "" }
-  [keystore]
+  [^KeyStore keystore]
   (find-aliases keystore (fn [ks n] (.isCertificateEntry ks n))))
 
 (defn pkey-aliases ^{ :doc "" }
-  [keystore]
+  [^KeyStore keystore]
   (find-aliases keystore (fn [ks n] (.isKeyEntry ks n))))
 
 (defn conv-cert ^{ :doc "" }
@@ -287,22 +287,22 @@
         p))))
 
 (defn gen-mac ^{ :doc "" }
-  ([^bytes skey data] (gen-mac skey data DEF_MAC))
-  ([^bytes skey data algo]
+  ([^bytes skey ^String data] (gen-mac skey data DEF_MAC))
+  ([^bytes skey ^String data ^String algo]
     (let [ mac (Mac/getInstance algo *BCProvider*) ]
       (.init mac (SecretKeySpec. skey algo))
       (.update mac (CU/bytesify data))
       (Hex/encodeHexString (.doFinal mac)))) )
 
 (defn gen-hash ^{ :doc "" }
-  ([data] (gen-hash data *SHA_512*))
-  ([data algo]
+  ([^String data] (gen-hash data *SHA_512*))
+  ([^String data ^String algo]
     (let [ dig (MessageDigest/getInstance algo)
            b (.digest dig (CU/bytesify data)) ]
       (Base64/encodeBase64String b))) )
 
 (defn make-keypair ^{ :doc "" }
-  [algo keylen]
+  [^String algo ^long keylen]
   (let [ kpg (KeyPairGenerator/getInstance algo *BCProvider*) ]
     (.initialize kpg keylen (get-srand))
     (.generateKeyPair kpg)) )
@@ -375,38 +375,38 @@
     (.verify cert pub)
     [cert prv]))
 
-(defn- mkSSV1 [^KeyStore ks ^KeyPair kp algo friendlyName ^Date start ^Date end dnStr pwdObj keylen ^File out]
+(defn- mkSSV1 [^KeyStore ks ^KeyPair kp algo ^Date start ^Date end dnStr pwdObj keylen ^File out]
   (do
     (debug "mkSSV1: dn= " dnStr ", key-len= " keylen)
     (let [ props (mkSSV1Cert (.getProvider ks) kp start end dnStr keylen algo)
            ca (.toCharArray pwdObj)
            baos (IO/make-baos) ]
-      (.setKeyEntry ks friendlyName (nth props 1) ca (into-array Certificate (nth props 0)))
+      (.setKeyEntry ks (CU/uid) (nth props 1) ca (into-array Certificate [ (nth props 0) ] ))
       (.store ks baos ca)
-      (FileUtils/write out (.toByteArray baos)) )) )
+      (FileUtils/writeByteArrayToFile out (.toByteArray baos)) )) )
 
 (defn make-pkcs12 ^{ :doc "" }
-  [friendlyName ^bytes keyPEM ^bytes certPEM pwdObj ^File out]
+  [^bytes keyPEM ^bytes certPEM pwdObj ^File out]
   (let [ ct (.getTrustedCertificate (conv-cert certPEM))
          rdr (InputStreamReader. (IO/streamify keyPEM))
          ss (get-pkcsStore)
          baos (IO/make-baos)
          kp (cast KeyPair (.readObject (PEMParser. rdr))) ]
-    (.setKeyEntry ss friendlyName (.getPrivate kp) (.toCharArray pwdObj) (into-array [ct]))
+    (.setKeyEntry ss (CU/uid) (.getPrivate kp) (.toCharArray pwdObj) (into-array [ct]))
     (.store ss baos (.toCharArray pwdObj))
     (FileUtils/write out (.toByteArray baos))))
 
 (defn make-ssv1PKCS12  ^{ :doc "" }
-  [friendlyName ^Date start ^Date end dnStr pwdObj keylen ^File out]
+  [^Date start ^Date end dnStr pwdObj keylen ^File out]
   (let [ ks (get-pkcsStore)
          kp (make-keypair *RSA* keylen) ]
-    (mkSSV1 ks kp DEF_ALGO friendlyName start end dnStr pwdObj keylen out)) )
+    (mkSSV1 ks kp DEF_ALGO start end dnStr pwdObj keylen out)) )
 
 (defn make-ssv1JKS ^{ :doc "" }
-  [friendlyName ^Date start ^Date end dnStr pwdObj keylen ^File out]
+  [^Date start ^Date end dnStr pwdObj keylen ^File out]
   (let [ ks (get-jksStore)
          kp (make-keypair *DSA* keylen) ]
-    (mkSSV1 ks kp "SHA1withDSA" friendlyName start end dnStr pwdObj keylen out)) )
+    (mkSSV1 ks kp "SHA1withDSA" start end dnStr pwdObj keylen out)) )
 
 (defn- mkSSV3Cert [pv kp start end dnStr issuer issuerKey keylen algo]
   (let [ top (cast X509Certificate issuer)
@@ -423,7 +423,7 @@
       (.verify cert (.getPublicKey top))
       [cert prv] )))
 
-(defn- mkSSV3 [ ^KeyStore ks ^KeyPair kp algo friendlyName ^Date start ^Date end dnStr pwdObj keylen issuerCerts issuerKey ^File out]
+(defn- mkSSV3 [ ^KeyStore ks ^KeyPair kp algo ^Date start ^Date end dnStr pwdObj keylen issuerCerts ^PrivateKey issuerKey ^File out]
   (do
     (debug "mkSSV3: dn= " dnStr ", key-len= " keylen)
     (let [ iscs (seq issuerCerts) 
@@ -431,21 +431,21 @@
            ca (.toCharArray pwdObj)
            baos (IO/make-baos)
            cs (cons (nth props 0) iscs) ]
-      (.setKeyEntry ks friendlyName (nth props 1) ca (to-array cs))
+      (.setKeyEntry ks (CU/uid) (nth props 1) ca (to-array cs))
       (.store ks baos ca)
       (FileUtils/write out (.toByteArray baos)))) )
 
 (defn make-ssv3PKCS12 ^{ :doc "" }
-  [friendlyName ^Date start ^Date end dnStr pwdObj keylen issuerCerts issuerKey ^File out]
+  [^Date start ^Date end dnStr pwdObj keylen issuerCerts ^PrivateKey issuerKey ^File out]
   (let [ ks (get-pkcsStore)
          kp (make-keypair *RSA* keylen) ]
-    (mkSSV3 ks kp DEF_ALGO friendlyName start end dnStr pwdObj keylen issuerCerts issuerKey out)) )
+    (mkSSV3 ks kp DEF_ALGO start end dnStr pwdObj keylen issuerCerts issuerKey out)) )
 
 (defn make-ssv3JKS ^{ :doc "" }
-  [friendlyName ^Date start ^Date end dnStr pwdObj keylen issuerCerts issuerKey ^File out]
+  [^Date start ^Date end dnStr pwdObj keylen issuerCerts issuerKey ^File out]
   (let [ ks (get-jksStore)
          kp (make-keypair *DSA* keylen) ]
-    (mkSSV3 ks  kp  "SHA1withDSA" friendlyName start end dnStr pwdObj keylen issuerCerts issuerKey out)))
+    (mkSSV3 ks  kp  "SHA1withDSA" start end dnStr pwdObj keylen issuerCerts issuerKey out)))
 
 (defn export-pkcs7 ^{ :doc "" }
   [^File p12File pwdObj ^File fileOut]

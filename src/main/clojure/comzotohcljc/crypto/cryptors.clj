@@ -201,12 +201,12 @@
       (CU/stringify (.toByteArray baos)))) )
 
 (deftype JavaCryptor [] BaseCryptor
-  (decrypt [this cipherText] (.decrypt this (.pkey this) cipherText))
+  (decrypt [this cipherText] (.decrypt this DFTKEY cipherText))
   (decrypt [this pwdStr cipherText]
     (do
       (ensure-key-size pwdStr (.algo this))
       (jcDecr pwdStr cipherText (.algo this))) )
-  (encrypt [this clearText] (.encrypt this (.pkey this) clearText))
+  (encrypt [this clearText] (.encrypt this DFTKEY clearText))
   (encrypt [this pwdStr clearText]
     (do
       (ensure-key-size pwdStr (.algo this))
@@ -248,12 +248,12 @@
       (Base64/encodeBase64String (.toByteArray baos)))) )
 
 (deftype BouncyCryptor [] BaseCryptor
-  (decrypt [this cipherText] (.decrypt this (.pkey this) cipherText))
+  (decrypt [this cipherText] (.decrypt this DFTKEY cipherText))
   (decrypt [this pwdStr cipherText]
     (do
       (ensure-key-size pwdStr (.algo this))
       (bcDecr pwdStr cipherText (.algo this))) )
-  (encrypt [this clearText] (.encrypt this (.pkey this) clearText))
+  (encrypt [this clearText] (.encrypt this DFTKEY clearText))
   (encrypt [this pwdStr clearText] 
     (do
       (ensure-key-size pwdStr (.algo this))
