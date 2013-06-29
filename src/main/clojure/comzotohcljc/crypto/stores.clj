@@ -58,13 +58,13 @@
               (recur rc)))))))
 
 (defprotocol CryptoStoreAPI
-  (addKeyEntity [this bits pwd] )
+  (addKeyEntity [this bits pwdObj] )
   (addCertEntity [this bits] )
   (trustManagerFactory [this] )
   (keyManagerFactory [this] )
   (certAliases [this] )
   (keyAliases [this] )
-  (keyEntity [this nm pwd] )
+  (keyEntity [this nm pwdObj] )
   (certEntity [this nm] )
   (removeEntity [this nm] )
   (intermediateCAs [this] )
@@ -78,7 +78,7 @@
     "JKS" (CO/get-jksStore)
     (throw (IllegalArgumentException. "wrong keystore type."))))
   
-(deftype CryptoStore [keystore passwd] CryptoStoreAPI
+(deftype CryptoStore [keystore passwdObj] CryptoStoreAPI
 
   (addKeyEntity [this bits pwdObj]
     ;; we load the p12 content into an empty keystore, then extract the entry
@@ -100,7 +100,7 @@
 
   (keyManagerFactory [this]
     (let [ m (KeyManagerFactory/getInstance (KeyManagerFactory/getDefaultAlgorithm)) ]
-      (.init m keystore  (.toCharArray (.text passwd)))
+      (.init m keystore  (.toCharArray passwdObj))
       m))
 
   (certAliases [this]
@@ -123,8 +123,8 @@
               (recur (conj rc a))
               (recur rc)))))))
 
-  (keyEntity [this nm pwd]
-    (let [ rc (.getEntry keystore nm (KeyStore$PasswordProtection. (.toCharArray (.text pwd)))) ] rc))
+  (keyEntity [this nm pwdObj]
+    (let [ rc (.getEntry keystore nm (KeyStore$PasswordProtection. (.toCharArray pwdObj))) ] rc))
 
   (certEntity [this nm]
     (let [ rc (.getEntry keystore nm nil) ] rc))

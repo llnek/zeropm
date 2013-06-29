@@ -30,12 +30,17 @@
   )
 
 (def ^:private ROOTPFX (CU/rc-bytes "com/zotoh/frwk/crypto/test.pfx"))
+(def ^:private ROOTJKS (CU/rc-bytes "com/zotoh/frwk/crypto/test.jks"))
 (def ^:private ENDDT (.getTime (GregorianCalendar. 2050 1 1)))
 (def ^:private TESTPWD "secretsecretsecretsecretsecret")
 
 (def ^:private ROOTCS 
   (comzotohcljc.crypto.stores.CryptoStore. 
                         (RU/init-store! (RU/get-pkcsStore) ROOTPFX "helpme") "helpme"))
+
+(def ^:private ROOTKS 
+  (comzotohcljc.crypto.stores.CryptoStore. 
+                        (RU/init-store! (RU/get-jksStore) ROOTJKS "helpme") "helpme"))
 
 (deftest test-cryptostuff-module
 
@@ -89,22 +94,31 @@
 (is (let [ v (RU/make-csrreq 1024 "C=AU,ST=NSW,L=Sydney,O=Google,OU=HQ,CN=www.google.com" "PEM") ]
           (and (= (.size v) 2) (> (alength (first v)) 0) (> (alength (nth v 1)) 0))) )
 
-(is (let [ fout (IO/make-tmpfile)]
+(is (let [ fout (IO/make-tmpfile "" ".p12")]
       (RU/make-ssv1PKCS12 (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024 fout)
       (> (.length fout) 0)))
 
-(is (let [ fout (IO/make-tmpfile) ]
+(is (let [ fout (IO/make-tmpfile "" ".jks") ]
       (RU/make-ssv1JKS (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024 fout)
             (> (.length fout) 0)))
 
 (is (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
-       fout (IO/make-tmpfile)
+       fout (IO/make-tmpfile "" ".p12")
        pk (.getPrivateKey pke)
        cs (.getCertificateChain pke) ]
             (RU/make-ssv3PKCS12 (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024  cs pk fout)
               (> (.length fout) 0)))
 
+(is (let [ pke (.keyEntity ROOTKS (first (.keyAliases ROOTKS)) "helpme")
+       fout (IO/make-tmpfile "" ".jks")
+       pk (.getPrivateKey pke)
+       cs (.getCertificateChain pke) ]
+            (RU/make-ssv3JKS (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024  cs pk fout)
+              (> (.length fout) 0)))
 
+(is (let [ fout (IO/make-tmpfile "" ".p7b") ]
+        (RU/export-pkcs7 (CU/rc-url "com/zotoh/frwk/crypto/test.pfx") "helpme" fout)
+          (> (.length fout) 0)))
 
 
 )
