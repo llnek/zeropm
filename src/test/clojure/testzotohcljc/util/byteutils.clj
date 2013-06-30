@@ -18,11 +18,12 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.byteutils
-  (:use [clojure.test])
-  (:import (java.nio.charset Charset))
-  (:require [comzotohcljc.util.byteutils :as BU])
-  )
+(ns testzotohcljc.util.byteutils)
+
+(use '[clojure.test])
+(import '(java.nio.charset Charset))
+(require '[comzotohcljc.util.byteutils :as BU])
+
 
 (def ^:private CS_UTF8 (Charset/forName "utf-8"))
 
@@ -38,7 +39,7 @@
 
 )
 
-(def ^:private test-byteutils-eof nil)
+(def ^:private byteutils-eof nil)
 
-(clojure.test/run-tests 'testzotohcljc.util.byteutils)
+;;(clojure.test/run-tests 'testzotohcljc.util.byteutils)
 

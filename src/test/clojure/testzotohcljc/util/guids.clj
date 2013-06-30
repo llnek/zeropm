@@ -18,10 +18,10 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.guids
-  (:use [clojure.test])
-  (:require [comzotohcljc.util.guids :as GU])
-  )
+(ns testzotohcljc.util.guids)
+
+(use '[clojure.test])
+(require '[comzotohcljc.util.guids :as GU])
 
 ;;(def ^:private UID_2 (GU/new-uuid))
 ;;(def ^:private UID_1 (GU/new-uuid))
@@ -38,7 +38,7 @@
 
 )
 
-(def ^:private test-guids-eof nil)
+(def ^:private guids-eof nil)
 
-(clojure.test/run-tests 'testzotohcljc.util.guids)
+;;(clojure.test/run-tests 'testzotohcljc.util.guids)
 

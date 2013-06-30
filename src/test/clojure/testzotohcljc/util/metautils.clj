@@ -18,10 +18,11 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.metautils
-  (:use [clojure.test])
-  (:require [comzotohcljc.util.metautils :as MU])
-  )
+(ns testzotohcljc.util.metautils)
+
+(use '[clojure.test])
+(require '[comzotohcljc.util.metautils :as MU])
+
 
 (deftest test-metautils-module
 
@@ -58,7 +59,7 @@
 
 )
 
-(def ^:private test-metautils-eof nil)
+(def ^:private metautils-eof nil)
 
-(clojure.test/run-tests 'testzotohcljc.util.metautils)
+;;(clojure.test/run-tests 'testzotohcljc.util.metautils)
 

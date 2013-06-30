@@ -18,11 +18,10 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.win32ini
-  (:use [clojure.test])
-  (:require [comzotohcljc.util.coreutils :as CU])
-  (:require [comzotohcljc.util.win32ini :as WI])
-  )
+(ns testzotohcljc.util.win32ini)
+(use '[clojure.test])
+(require '[comzotohcljc.util.coreutils :as CU])
+(require '[comzotohcljc.util.win32ini :as WI])
 
 (def ^:private INIFILE (WI/parse-inifile (CU/rc-url "com/zotoh/frwk/util/sample.ini")))
 
@@ -42,7 +41,7 @@
 
 )
 
-(def ^:private test-win32ini-eof nil)
+(def ^:private win32ini-eof nil)
 
-(clojure.test/run-tests 'testzotohcljc.util.win32ini)
+;;(clojure.test/run-tests 'testzotohcljc.util.win32ini)
 

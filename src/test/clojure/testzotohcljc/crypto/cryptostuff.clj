@@ -18,29 +18,32 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.crypto.cryptostuff
-  (:use [clojure.test])
-  (:import (java.security Policy KeyStore SecureRandom))
-  (:import (java.util Date GregorianCalendar))
-  (:require [comzotohcljc.crypto.cryptors :as RT])
-  (:require [comzotohcljc.crypto.stores :as ST])
-  (:require [comzotohcljc.util.coreutils :as CU])
-  (:require [comzotohcljc.util.ioutils :as IO])
-  (:require [comzotohcljc.crypto.cryptutils :as RU])
-  )
+(ns testzotohcljc.crypto.cryptostuff)
+
+(use '[clojure.test])
+(import '(java.security Policy KeyStore SecureRandom))
+(import '(java.util Date GregorianCalendar))
+(require '[comzotohcljc.crypto.cryptors :as RT])
+(require '[comzotohcljc.crypto.stores :as ST])
+(require '[comzotohcljc.util.coreutils :as CU])
+(require '[comzotohcljc.util.ioutils :as IO])
+(require '[comzotohcljc.crypto.cryptutils :as RU])
+
 
 (def ^:private ROOTPFX (CU/rc-bytes "com/zotoh/frwk/crypto/test.pfx"))
 (def ^:private ROOTJKS (CU/rc-bytes "com/zotoh/frwk/crypto/test.jks"))
 (def ^:private ENDDT (.getTime (GregorianCalendar. 2050 1 1)))
-(def ^:private TESTPWD "secretsecretsecretsecretsecret")
+(def ^:private TESTPWD (RT/pwdify "secretsecretsecretsecretsecret"))
+(def ^:private HELPME (RT/pwdify "helpme"))
+(def ^:private SECRET (RT/pwdify "secret"))
 
 (def ^:private ROOTCS 
   (comzotohcljc.crypto.stores.CryptoStore. 
-                        (RU/init-store! (RU/get-pkcsStore) ROOTPFX "helpme") "helpme"))
+                        (RU/init-store! (RU/get-pkcsStore) ROOTPFX HELPME) HELPME))
 
 (def ^:private ROOTKS 
   (comzotohcljc.crypto.stores.CryptoStore. 
-                        (RU/init-store! (RU/get-jksStore) ROOTJKS "helpme") "helpme"))
+                        (RU/init-store! (RU/get-jksStore) ROOTJKS HELPME) HELPME))
 
 (deftest test-cryptostuff-module
 
@@ -51,7 +54,7 @@
                       (.decrypt c (.encrypt c "heeloo")))))
 
 (is (= "heeloo" (let [ c (comzotohcljc.crypto.cryptors.JasyptCryptor.) ]
-                      (.decrypt c "secret" (.encrypt c "secret" "heeloo")))))
+                      (.decrypt c SECRET (.encrypt c SECRET "heeloo")))))
 
 (is (= "heeloo" (let [ c (comzotohcljc.crypto.cryptors.JavaCryptor.) ]
                       (.decrypt c (.encrypt c "heeloo")))))
@@ -68,8 +71,8 @@
 (is (= (.length (.text (RT/create-strong-pwd 16))) 16))
 (is (= (.length (RT/create-random-string 64)) 64))
 
-(is (instance? comzotohcljc.crypto.cryptors.Password (RT/create-password "secret-text")))
-(is (.startsWith (.encoded (RT/create-password "secret-text")) "CRYPT:"))
+(is (instance? comzotohcljc.crypto.cryptors.Password (RT/pwdify "secret-text")))
+(is (.startsWith (.encoded (RT/pwdify "secret-text")) "CRYPT:"))
 
 
 (is (= "SHA-512" (.getAlgorithm (RU/make-MsgDigest RU/*SHA_512*))))
@@ -95,35 +98,35 @@
           (and (= (.size v) 2) (> (alength (first v)) 0) (> (alength (nth v 1)) 0))) )
 
 (is (let [ fout (IO/make-tmpfile "" ".p12")]
-      (RU/make-ssv1PKCS12 (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024 fout)
+      (RU/make-ssv1PKCS12 (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" SECRET 1024 fout)
       (> (.length fout) 0)))
 
 (is (let [ fout (IO/make-tmpfile "" ".jks") ]
-      (RU/make-ssv1JKS (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024 fout)
+      (RU/make-ssv1JKS (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" SECRET 1024 fout)
             (> (.length fout) 0)))
 
-(is (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
+(is (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) HELPME)
        fout (IO/make-tmpfile "" ".p12")
        pk (.getPrivateKey pke)
        cs (.getCertificateChain pke) ]
-            (RU/make-ssv3PKCS12 (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024  cs pk fout)
+            (RU/make-ssv3PKCS12 (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" SECRET 1024  cs pk fout)
               (> (.length fout) 0)))
 
-(is (let [ pke (.keyEntity ROOTKS (first (.keyAliases ROOTKS)) "helpme")
+(is (let [ pke (.keyEntity ROOTKS (first (.keyAliases ROOTKS)) HELPME)
        fout (IO/make-tmpfile "" ".jks")
        pk (.getPrivateKey pke)
        cs (.getCertificateChain pke) ]
-            (RU/make-ssv3JKS (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" "secret" 1024  cs pk fout)
+            (RU/make-ssv3JKS (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" SECRET 1024  cs pk fout)
               (> (.length fout) 0)))
 
 (is (let [ fout (IO/make-tmpfile "" ".p7b") ]
-        (RU/export-pkcs7 (CU/rc-url "com/zotoh/frwk/crypto/test.pfx") "helpme" fout)
+        (RU/export-pkcs7 (CU/rc-url "com/zotoh/frwk/crypto/test.pfx") HELPME fout)
           (> (.length fout) 0)))
 
 
 )
 
-(def ^:private test-cryptostuff-eof nil)
+(def ^:private cryptostuff-eof nil)
 
-(clojure.test/run-tests 'testzotohcljc.crypto.cryptostuff)
+;;(clojure.test/run-tests 'testzotohcljc.crypto.cryptostuff)
 

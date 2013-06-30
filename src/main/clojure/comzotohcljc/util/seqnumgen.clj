@@ -19,9 +19,10 @@
 ;;
 
 (ns ^{ :doc "Generate some sequence numbers." :author "kenl" }
-  comzotohcljc.util.seqnumgen
-  (:import (java.util.concurrent.atomic AtomicLong AtomicInteger) )
-  )
+  comzotohcljc.util.seqnumgen)
+
+(import '(java.util.concurrent.atomic AtomicLong AtomicInteger) )
+
 
 (def ^:private _numInt (AtomicInteger. 1))
 (def ^:private  _numLong (AtomicLong. 1))

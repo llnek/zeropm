@@ -18,23 +18,31 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns ^{ :doc "Locale resources." :author "kenl" }
-  comzotohcljc.i18n.i18nutils
-  (:import (java.util PropertyResourceBundle ResourceBundle Locale))
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:import (java.io File FileInputStream))
-  (:require [ comzotohcljc.util.metautils :as MU])
-  (:require [ comzotohcljc.util.coreutils :as CU])
-  (:require [ comzotohcljc.util.strutils :as SU])
-  )
+(ns ^{ :doc "Locale resources."
+       :author "kenl" }
+  comzotohcljc.i18n.i18nutils)
 
-(defn load-resbundle ^{ :doc "Load a properties file containing localized string." }
+(import '(java.util PropertyResourceBundle ResourceBundle Locale))
+(import '(org.apache.commons.lang3 StringUtils))
+(import '(java.io File FileInputStream))
+(import '(java.net URL))
+(require '[ comzotohcljc.util.metautils :as MU])
+(require '[ comzotohcljc.util.coreutils :as CU])
+(require '[ comzotohcljc.util.strutils :as SU])
+
+
+(defmulti ^{ :doc "Load a properties file containing localized string." } load-resource class)
+
+(defmethod load-resource File
   [^File aFile]
-  (do
-    (with-open [ inp (FileInputStream. aFile) ]
-      (PropertyResourceBundle. inp))) )
+  (load-resource (-> aFile (.toURI) (.toURL))))
 
-(defn get-resbundle ^{ :doc "Return a resource bundle." }
+(defmethod load-resource URL
+  [^URL url]
+  (with-open [ inp (.openStream url) ]
+      (PropertyResourceBundle. inp)))
+
+(defn get-resource ^{ :doc "Return a resource bundle." }
   [^String baseName ^Locale locale ^ClassLoader cl]
   (if (or (nil? baseName)(nil? locale))
     nil
@@ -51,5 +59,5 @@
           (recur (StringUtils/replace src "{}" (SU/nsb (nth pms pos)) 1) (inc pos)))))))
 
 
-(def ^:private i18n-eof nil)
+(def ^:private i18nutils-eof nil)
 

@@ -19,15 +19,16 @@
 ;;
 
 (ns ^{ :doc "Ways to generate an unique id." :author "kenl" }
-  comzotohcljc.util.guids
-  (:import (java.net InetAddress) )
-  (:import (java.lang StringBuilder) )
-  (:import (java.lang Math) )
-  (:require [ comzotohcljc.util.coreutils :as CU ] )
-  (:require [ comzotohcljc.util.strutils :as SU ] )
-  (:require [ comzotohcljc.util.byteutils :as BU ] )
-  (:require [ comzotohcljc.util.seqnumgen :as SQ ] )
-  )
+  comzotohcljc.util.guids)
+
+(import '(java.net InetAddress) )
+(import '(java.lang StringBuilder) )
+(import '(java.lang Math) )
+(require '[ comzotohcljc.util.coreutils :as CU ] )
+(require '[ comzotohcljc.util.strutils :as SU ] )
+(require '[ comzotohcljc.util.byteutils :as BU ] )
+(require '[ comzotohcljc.util.seqnumgen :as SQ ] )
+
 
 ;;(def ^:private  _CHARS (.toCharArray "0123456789AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz"))
 (def ^:private  _CHARS (.toCharArray "YcQnPuzVAvpi7taGj1XwoJbIK3smye96NlHrR2DZS0CUxkLF5O4g8fBTqMEdhW"))

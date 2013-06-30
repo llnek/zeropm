@@ -20,11 +20,12 @@
 
 (ns ^{  :doc "Utility functions for class related or reflection related operations."
         :author "kenl" }
-  comzotohcljc.util.metautils
-  (:import (java.lang.reflect Field Method Modifier))
-  (:require [ comzotohcljc.util.coreutils :as CU ] )
-  (:require [ comzotohcljc.util.strutils :as SU ] )
-  )
+  comzotohcljc.util.metautils)
+
+
+(import '(java.lang.reflect Field Method Modifier))
+(require '[ comzotohcljc.util.coreutils :as CU ] )
+(require '[ comzotohcljc.util.strutils :as SU ] )
 
 (defmulti ^{ :doc "Returns true if clazz is subclass of this base class." } is-child
   (fn [a b]
@@ -120,10 +121,10 @@
 
 (defn list-parents ^{ :doc "List all parent classes." }
   [^Class javaClass]
-  (let [ rc (loop [ bin [] par javaClass ]
+  (let [ rc (loop [ sum [] par javaClass ]
               (if (nil? par)
-                bin
-                (recur (conj bin par) (.getSuperclass par))))  ]
+                sum
+                (recur (conj sum par) (.getSuperclass par))))  ]
     ;; since we always add the original class, we need to ignore it on return
     (if (> (.size rc) 1) (rest rc) [] )))
 

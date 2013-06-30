@@ -18,10 +18,11 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.dateutils
-  (:use [clojure.test])
-  (:require [comzotohcljc.util.dateutils :as DU])
-  )
+(ns testzotohcljc.util.dateutils)
+
+(use '[clojure.test])
+(require '[comzotohcljc.util.dateutils :as DU])
+  
 
 (deftest test-dateutils-module
 
@@ -32,7 +33,7 @@
 
 )
 
-(def ^:private test-dateutils-eof nil)
+(def ^:private dateutils-eof nil)
 
-(clojure.test/run-tests 'testzotohcljc.util.dateutils)
+;;(clojure.test/run-tests 'testzotohcljc.util.dateutils)
 

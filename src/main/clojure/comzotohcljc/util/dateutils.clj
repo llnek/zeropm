@@ -19,25 +19,26 @@
 ;;
 
 (ns ^{ :doc "Date related utilities." :author "kenl" }
-  comzotohcljc.util.dateutils
-  (:import (java.text ParsePosition SimpleDateFormat))
-  (:import (java.util Locale TimeZone SimpleTimeZone
-    Date Calendar GregorianCalendar))
-  (:import (java.sql Timestamp))
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:require [ comzotohcljc.util.constants :as CS ])
-  (:require [ comzotohcljc.util.coreutils :as CU ])
-  (:require [ comzotohcljc.util.strutils :as SU ])
-  )
+  comzotohcljc.util.dateutils)
+
+(import '(java.text ParsePosition SimpleDateFormat))
+(import '(java.util Locale TimeZone SimpleTimeZone
+  Date Calendar GregorianCalendar))
+(import '(java.sql Timestamp))
+(import '(org.apache.commons.lang3 StringUtils))
+(require '[ comzotohcljc.util.constants :as CS ])
+(require '[ comzotohcljc.util.coreutils :as CU ])
+(require '[ comzotohcljc.util.strutils :as SU ])
+
 
 (defn leap-year? ^{ :doc "Return true if this is a leap year." }
-  [year]
+  [^long year]
   (cond (zero? (mod year 400)) true
     (zero? (mod year 100)) false
     :else (zero? (mod year 4))) )
 
 (defn has-tz? ^{ :doc "Returns true if this datetime string contains some timezone info." }
-  [dateStr]
+  [^String dateStr]
   (let [ tkns (.split (SU/nsb dateStr) (if (SU/has? dateStr \:) CS/TS_REGEX CS/DT_REGEX )) ]
     (some (fn [s]
             (or (SU/has-any? (SU/nsb s) ["+" "-"])
@@ -45,19 +46,19 @@
 
 (defn parse-timestamp ^{ :doc "Convert string into a valid Timestamp object.
   *tstr* conforming to the format \"yyyy-mm-dd hh:mm:ss.[fff...]\"" }
-  [tstr]
+  [^String tstr]
   (try
     (Timestamp/valueOf tstr)
     (catch Throwable t nil)) )
 
 (defn parse-date ^{ :doc "Convert string into a Date object." }
-  [tstr fmt]
+  [^String tstr ^String fmt]
   (if (or (StringUtils/isEmpty tstr) (StringUtils/isEmpty fmt))
     nil
     (.parse (SimpleDateFormat. fmt) tstr)))
 
 (defn parse-iso8601 ^{ :doc "Parses datetime in ISO8601 format." }
-  [tstr]
+  [^String tstr]
   (if (StringUtils/isEmpty tstr)
     nil
     (let [ fmt (if (SU/has? tstr \:)
@@ -67,13 +68,13 @@
       (parse-date tstr fmt))))
 
 (defn fmt-timestamp ^{ :doc "Convert Timestamp into a string value." }
-  [ts]
+  [^Timestamp ts]
   (if (nil? ts) "" (.toString ts)))
 
 (defn fmt-date ^{ :doc "Convert Date into string value." }
-  ( [dt] (fmt-date dt CS/DT_FMT_MICRO nil))
-  ( [dt fmt] (fmt-date dt fmt nil))
-  ( [dt fmt tz]
+  ( [^Date dt] (fmt-date dt CS/DT_FMT_MICRO nil))
+  ( [^Date dt fmt] (fmt-date dt fmt nil))
+  ( [^Date dt fmt ^TimeZone tz]
     (if (or (nil? dt) (StringUtils/isEmpty fmt))
       ""
       (let [ df (SimpleDateFormat. fmt) ]
@@ -81,12 +82,12 @@
         (.format df dt)))) )
 
 (defn fmt-gmt ^{ :doc "Convert Date object into a string - GMT timezone." }
-  [dt]
+  [^Date dt]
   (do
     (fmt-date dt CS/DT_FMT_MICRO (SimpleTimeZone. 0 "GMT")) ))
 
 
-(defn- add [cal calendarField amount]
+(defn- add [^Calendar cal calendarField amount]
   (if (nil? cal)
     nil
     (doto (GregorianCalendar. (.getTimeZone cal))
@@ -94,19 +95,19 @@
       (.add calendarField amount))))
 
 (defn add-years ^{ :doc "Add n more years to the calendar." }
-  [cal yrs]
+  [^Calendar cal yrs]
   (add cal Calendar/YEAR yrs))
 
 (defn add-months ^{ :doc "Add n more months to the calendar." }
-  [cal mts]
+  [^Calendar cal mts]
   (add cal Calendar/MONTH mts))
 
 (defn add-days ^{ :doc "Add n more days to the calendar." }
-  [cal days]
+  [^Calendar cal days]
   (add cal Calendar/DAY_OF_YEAR days))
 
 (defn fmt-cal ^{ :doc "Formats time to yyyyMMdd-hhmmss." }
-  [cal]
+  [^Calendar cal]
   (do
     (java.lang.String/format (Locale/getDefault) "%1$04d%2$02d%3$02d-%4$02d%5$02d%6$02d"
        (into-array Object [
@@ -118,7 +119,7 @@
             (.get cal Calendar/SECOND) ] ))))
 
 (defn debug-cal ^{ :doc "Debug show a calendar's internal data." }
-  [cal]
+  [^Calendar cal]
   (do
     (clojure.string/join ""
         [ "{" (.. cal (getTimeZone) (getDisplayName) )  "} "

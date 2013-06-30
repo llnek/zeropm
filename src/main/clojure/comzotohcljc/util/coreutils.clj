@@ -18,24 +18,27 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns ^{ :doc "General utilties." :author "ken" }
-  comzotohcljc.util.coreutils
-  (:use [clojure.tools.logging :only (info warn error debug)])
-  ;;(:use [clojure.string])
-  (:import (java.security SecureRandom))
-  (:import (java.nio.charset Charset))
-  (:import (java.io
-    InputStream File FileInputStream
-    ByteArrayInputStream ByteArrayOutputStream))
-  (:import (java.util Properties Date GregorianCalendar TimeZone))
-  (:import (java.util.zip DataFormatException Deflater Inflater))
-  (:import (java.sql Timestamp))
-  (:import (java.rmi.server UID))
-  (:import (org.apache.commons.lang3.text StrSubstitutor))
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:import (org.apache.commons.io IOUtils FilenameUtils))
-  (:import (org.apache.commons.lang3 SerializationUtils))
-)
+(ns ^{ :doc "General utilties." :author "kenl" }
+  comzotohcljc.util.coreutils)
+
+(use '[clojure.tools.logging :only (info warn error debug)])
+;;(:use [clojure.string])
+(import '(java.security SecureRandom))
+(import '(java.net URL))
+(import '(java.nio.charset Charset))
+(import '(java.io
+  InputStream File FileInputStream
+  ByteArrayInputStream ByteArrayOutputStream))
+(import '(java.util Properties Date GregorianCalendar TimeZone))
+(import '(java.util.zip DataFormatException Deflater Inflater))
+(import '(java.sql Timestamp))
+(import '(java.rmi.server UID))
+(import '(org.apache.commons.lang3.text StrSubstitutor))
+(import '(org.apache.commons.lang3 StringUtils))
+(import '(org.apache.commons.io IOUtils FilenameUtils))
+(import '(org.apache.commons.lang3 SerializationUtils))
+
+
 
 (def ^:private _BOOLS #{ "true" "yes"  "on"  "ok"  "active"  "1"} )
 (def ^:private _PUNCS #{ \_ \- \. \( \) \space } )
@@ -179,13 +182,15 @@
 
 (defmethod load-javaprops InputStream
   [^InputStream inp]
-  (let [ ps (Properties.) ]
-    (.load ps inp)
-    ps))
+  (doto (Properties.) (.load inp)))
 
 (defmethod load-javaprops File
   [^File aFile]
-  (with-open [ inp (FileInputStream. aFile) ]
+  (load-javaprops (-> aFile (.toURI) (.toURL) )))
+
+(defmethod load-javaprops URL
+  [^URL aFile]
+  (with-open [ inp (.openStream aFile) ]
     (load-javaprops inp)))
 
 (defn stringify ^{ :doc "Make a string from bytes." }

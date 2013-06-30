@@ -18,10 +18,11 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.strutils
-  (:use [clojure.test])
-  (:require [comzotohcljc.util.strutils :as SU])
-  )
+(ns testzotohcljc.util.strutils)
+
+(use '[clojure.test])
+(require '[comzotohcljc.util.strutils :as SU])
+
 
 (deftest test-strutils-module
 
@@ -76,7 +77,7 @@
 
 )
 
-(def ^:private test-strutils-eof nil)
+(def ^:private strutils-eof nil)
 
-(clojure.test/run-tests 'testzotohcljc.util.strutils)
+;;(clojure.test/run-tests 'testzotohcljc.util.strutils)
 

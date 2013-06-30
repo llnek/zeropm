@@ -19,32 +19,34 @@
 ;;
 
 (ns ^{ :doc "" :author "kenl" }
-  comzotohcljc.net.netutils
-  (:use [clojure.tools.logging :only (info warn error debug)])
-  (:import (java.security.cert X509Certificate CertificateException))
-  (:import (org.jboss.netty.handler.codec.http HttpMessage))  
-  (:import (java.security KeyStoreException
-    KeyStore InvalidAlgorithmParameterException))
-  (:import (javax.net.ssl
-    SSLContext SSLEngine X509TrustManager
-    TrustManagerFactorySpi TrustManager
-    ManagerFactoryParameters))
-  (:import (com.zotoh.frwk.net SSLTrustMgrFactory))
-  (:import (com.zotoh.frwk.io XData))
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:import (org.apache.http.client))
-  (:import (org.apache.http.client.methods HttpGet HttpPost))
-  (:import (org.apache.http.impl.client DefaultHttpClient))
-  (:import (org.apache.http Header
-    StatusLine HttpEntity HttpResponse))
-  (:import (java.io File IOException))
-  (:import (org.apache.http.util EntityUtils))
-  (:import (java.net URI))
-  (:import (org.apache.http.params HttpConnectionParams))
-  (:import (org.apache.http.entity InputStreamEntity))
-  (:require [comzotohcljc.util.coreutils :as CU])
-  (:require [comzotohcljc.util.strutils :as SU])
-  )
+  comzotohcljc.net.netutils)
+
+(use '[clojure.tools.logging :only (info warn error debug)])
+(import '(java.security.cert X509Certificate CertificateException))
+(import '(org.jboss.netty.handler.codec.http HttpMessage))
+(import '(java.security KeyStoreException
+  KeyStore InvalidAlgorithmParameterException))
+(import '(javax.net.ssl
+  SSLContext SSLEngine X509TrustManager
+  TrustManagerFactorySpi TrustManager
+  ManagerFactoryParameters))
+(import '(com.zotoh.frwk.net SSLTrustMgrFactory))
+(import '(com.zotoh.frwk.io XData))
+(import '(org.apache.commons.lang3 StringUtils))
+(import '(org.apache.http.client))
+(import '(org.apache.http.client.methods HttpGet HttpPost))
+(import '(org.apache.http.impl.client DefaultHttpClient))
+(import '(org.apache.http Header
+  StatusLine HttpEntity HttpResponse))
+(import '(java.io File IOException))
+(import '(org.apache.http.util EntityUtils))
+(import '(java.net URL URI))
+(import '(org.apache.http.params HttpConnectionParams))
+(import '(org.apache.http.entity InputStreamEntity))
+(require '[comzotohcljc.util.coreutils :as CU])
+(require '[comzotohcljc.util.mimeutils :as MM])
+(require '[comzotohcljc.util.strutils :as SU])
+
 
 (def ^:dynamic  *LHOST* "localhost")
 
@@ -103,7 +105,12 @@
 
 (def ^:dynamic *socket-timeout* 5000)
 
-(defrecord HTTPMsgInfo [protocol method uri is-chunked keep-alive clen headers params] )
+(defrecord HTTPResult [^String content-type ^String encoding ^long content-length ^bytes body])
+
+(defrecord HTTPMsgInfo [^String protocol ^String method ^String uri
+                        is-chunked keep-alive
+                        ^long clen headers params] )
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; internal functions to support apache http client.
@@ -126,11 +133,14 @@
     (CU/TryC
       (debug "content-encoding: " (.getContentEncoding ent))
       (debug "content-type: " cv))
-    (cond
-      (or (.startsWith cl "text/")
-           (.startsWith cl "application/xml")
-           (.startsWith cl "application/json")) (get-str ent)
-      :else (get-bits ent))) )
+    (let [ bits (get-bits ent)
+           clen (if (nil? bits) 0 (alength bits)) ]
+      (HTTPResult. (SU/nsb cv) (MM/get-charset cv) clen bits))))
+    ;;(cond
+      ;;(or (.startsWith cl "text/")
+          ;;(.startsWith cl "application/xml")
+          ;;(.startsWith cl "application/json")) (get-bits ent) ;;(get-str ent)
+      ;;:else (get-bits ent))) )
 
 (defn- p-error [rsp exp]
   (do
@@ -149,26 +159,25 @@
       (and (>= rc 300) (< rc 400)) (p-redirect rsp)
       :else (p-error rsp (IOException. (str "Service Error: code = " rc ": " msg))))) )
 
-(defn- do-post [cli targetUrl contentType xdata chunkIt beforeSendFunc]
+(defn- do-post [cli ^URI targetUrl contentType ^XData xdata chunkIt beforeSendFunc]
   (try
     (let [ p (HttpPost. targetUrl)
            ent (InputStreamEntity. (.stream xdata) (.size xdata)) ]
-      (doto ent
-        (.setContentType contentType)
-        (.setChunked chunkIt))
-      (.setEntity p ent)
+      (.setEntity p (doto ent
+                          (.setContentType contentType)
+                          (.setChunked chunkIt)))
       (when-not (nil? beforeSendFunc) (beforeSendFunc p))
       (p-reply (.execute cli p)))
     (finally
         (.. cli getConnectionManager shutdown))) )
 
 (defn sync-post ^{ :doc "Perform a http-post on the target url." }
-  ([targetUrl contentType xdata] (sync-post targetUrl contentType xdata false nil))
-  ([targetUrl contentType xdata chunkIt beforeSendFunc]
+  ([^URI targetUrl contentType ^XData xdata] (sync-post targetUrl contentType xdata false nil))
+  ([^URI targetUrl contentType ^XData xdata chunkIt beforeSendFunc]
     (let [ cli (mkApacheClientHandle) ]
         (do-post cli targetUrl contentType xdata chunkIt beforeSendFunc))) )
 
-(defn- do-get [cli targetUrl beforeSendFunc]
+(defn- do-get [cli ^URI targetUrl beforeSendFunc]
   (try
     (let [ g (HttpGet. targetUrl) ]
       (when-not (nil? beforeSendFunc) (beforeSendFunc g))
@@ -177,8 +186,8 @@
       (.. cli getConnectionManager shutdown))) )
 
 (defn sync-get ^{ :doc "Perform a http-get on the target url." }
-  ([targetUrl] (sync-get targetUrl nil))
-  ([targetUrl beforeSendFunc]
+  ([^URI targetUrl] (sync-get targetUrl nil))
+  ([^URI targetUrl beforeSendFunc]
     (let [ cli (mkApacheClientHandle) ]
       (do-get cli targetUrl beforeSendFunc))) )
 

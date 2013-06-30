@@ -19,15 +19,15 @@
 ;;
 
 (ns ^{ :doc "String utilities." :author "kenl" }
-  comzotohcljc.util.strutils
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:import (java.io CharArrayWriter File
-    OutputStream OutputStreamWriter
-    Reader Writer))
-  (:import (java.util Arrays Collection
-    Iterator StringTokenizer))
-  (:import (java.lang StringBuilder))
-  )
+  comzotohcljc.util.strutils)
+
+(import '(org.apache.commons.lang3 StringUtils))
+(import '(java.io CharArrayWriter File
+  OutputStream OutputStreamWriter
+  Reader Writer))
+(import '(java.util Arrays Collection
+  Iterator StringTokenizer))
+(import '(java.lang StringBuilder))
 
 (defn has? ^{ :doc "Returns true if this character is inside this string." }
   [^String aStr ch]

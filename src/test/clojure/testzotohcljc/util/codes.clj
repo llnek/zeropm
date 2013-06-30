@@ -18,11 +18,11 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.codes
-  (:use [clojure.test])
-  (:require [comzotohcljc.util.countrycode :as CC])
-  (:require [comzotohcljc.util.usastate :as SC])
-  )
+(ns testzotohcljc.util.codes)
+
+(use '[clojure.test])
+(require '[comzotohcljc.util.countrycode :as CC])
+(require '[comzotohcljc.util.usastate :as SC])
 
 (deftest test-codes-module
 
@@ -40,7 +40,7 @@
 
 )
 
-(def ^:private test-codes-eof nil)
+(def ^:private codes-eof nil)
 
-(clojure.test/run-tests 'testzotohcljc.util.codes)
+;;(clojure.test/run-tests 'testzotohcljc.util.codes)
 

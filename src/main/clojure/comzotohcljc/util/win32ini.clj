@@ -18,19 +18,22 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 
 (ns ^{ :doc "Functions to load and query a .ini file." :author "kenl" }
-  comzotohcljc.util.win32ini
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:import (java.net URL))
-  (:import (java.io File IOException InputStreamReader
-    LineNumberReader PrintStream))
-  (:import (com.zotoh.frwk.util NCMap))
-  (:import (java.util LinkedHashMap))
-  (:require [ comzotohcljc.util.coreutils :as CU ] )
-  (:require [ comzotohcljc.util.fileutils :as FU ] )
-  (:require [ comzotohcljc.util.strutils :as SU ] )
-  )
+  comzotohcljc.util.win32ini)
 
-(defprotocol IWin32Conf
+(import '(org.apache.commons.lang3 StringUtils))
+(import '(java.net URL))
+(import '(java.io File IOException InputStreamReader
+  LineNumberReader PrintStream))
+(import '(com.zotoh.frwk.util NCMap))
+(import '(java.util LinkedHashMap))
+(require '[ comzotohcljc.util.coreutils :as CU])
+(require '[ comzotohcljc.util.fileutils :as FU])
+(require '[ comzotohcljc.util.strutils :as SU])
+
+
+
+(defprotocol ^{ :doc "A Windows INI file object." }
+  IWin32Conf
   (getSectionAsMap [this sectionName] )
   (sectionKeys [this ] )
   (dbgShow [this])
@@ -45,16 +48,15 @@
 
 (defn- throwBadIni [rdr] (throw (IOException. (str "Bad ini line: " (.getLineNumber rdr)))))
 (defn- throwBadKey [k] (throw (Exception. (str "No such property " k "."))))
+(defn- throwBadMap [s] (throw (Exception. (str "No such section " s "."))))
 
-(defn- maybeSection
-  [rdr ncmap line]
+(defn- maybeSection [rdr ncmap line]
   (let [ s (StringUtils/trim (StringUtils/strip line "[]")) ]
     (when (StringUtils/isEmpty s) (throwBadIni rdr))
-    (if-not (.containsKey ncmap s) (.put ncmap s (LinkedHashMap.)))
+    (if-not (.containsKey ncmap s) (.put ncmap s (NCMap.)))
     s))
 
-(defn- maybeLine
-  [rdr ncmap section line]
+(defn- maybeLine [rdr ncmap section line]
   (let [ kvs (.get ncmap section) ]
     (when (nil? kvs) (throwBadIni rdr))
     (let [ pos (.indexOf line (int \=))
@@ -62,8 +64,7 @@
         (when (StringUtils/isEmpty nm) (throwBadIni rdr))
         (.put kvs nm (.trim (.substring line (+ pos 1)))) )) )
 
-(defn- evalOneLine
-  [rdr ncmap line curSec]
+(defn- evalOneLine [rdr ncmap line curSec]
   (let [ ln (.trim line) ]
     (cond
       (or (StringUtils/isEmpty ln) (.startsWith ln "#")) curSec
@@ -71,65 +72,67 @@
       :else (do (maybeLine rdr ncmap curSec ln) curSec)
       )) )
 
-(defn- parseIniFile
-  [fUrl]
+(defn- parseIniFile [fUrl]
   (with-open [ inp (.openStream fUrl) ]
-    (let [ rdr (LineNumberReader. (InputStreamReader. inp "utf-8")) ncmap (NCMap.) ]
+    (let [ rdr (LineNumberReader. (InputStreamReader. inp "utf-8")) total (NCMap.) ]
     (loop [ curSec "" line (.readLine rdr)  ]
       (if (nil? line)
-        ncmap
-        (recur (evalOneLine rdr ncmap line curSec) (.readLine rdr) )))) ))
+        total
+        (recur (evalOneLine rdr total line curSec) (.readLine rdr) )))) ))
 
-(defn- hasKV
-  [m k]
+(defn- hasKV [m k]
   (if (or (nil? k) (nil? m)) nil (.containsKey m k)) )
 
-(defn- getKV
-  [cf s k err]
-  (let [ mp (.getSectionAsMap cf s)
-         ok (if (or (nil? mp) (nil? k)) false true ) ]
-    (if (and err (not ok))
-      (throwBadKey k)
-      (.get mp k))) )
+(defn- getKV [cf s k err]
+  (let [ mp (.getSectionAsMap cf s) ]
+    (cond
+      (nil? mp) (if err (throwBadMap s) "")
+      (nil? k) (if err (throwBadKey k) "")
+      :else (.get mp k))))
 
 (deftype Win32Conf [mapOfSections] IWin32Conf
-  (getSectionAsMap [this sectionName] 
+
+  (getSectionAsMap [this sectionName]
     (if (nil? sectionName)
       nil
       (let [ m (.get mapOfSections sectionName) ]
-        (if (nil? m) nil (into {} m)))))     
+        (if (nil? m) nil (into {} m)))))
+
   (sectionKeys [this] (.keySet mapOfSections))
+
   (getString [this section property]
-    (let [ v (getKV this section property true) ]
-      (SU/nsb v)))
+    (SU/nsb (getKV this section property true)))
+
   (optString [this section property]
-    (let [ v (getKV this section property false) ]
-      (SU/nsb v)))
+    (SU/nsb (getKV this section property false)))
+
   (getLong [this section property]
-    (let [ v (getKV this section property true) ]
-      (CU/conv-long (SU/nsb v) 0)) )
+    (CU/conv-long (getKV this section property true) 0))
+
   (optLong [this section property]
-    (let [ v (getKV this section property false) ]
-      (CU/conv-long (SU/nsb v) 0)) )
+    (CU/conv-long (getKV this section property false) 0))
+
   (getDouble [this section property]
-    (let [ v (getKV this section property true) ]
-      (CU/conv-double (SU/nsb v) 0.0)) )
+    (CU/conv-double (getKV this section property true) 0.0))
+
   (optDouble [this section property]
-    (let [ v (getKV this section property false) ]
-      (CU/conv-double (SU/nsb v) 0.0)) )
+    (CU/conv-double (getKV this section property false) 0.0))
+
   (getBool [this section property]
-    (let [ v (getKV this section property true) ]
-      (CU/conv-bool (SU/nsb v) false)) )
+    (CU/conv-bool (getKV this section property true) false))
+
   (optBool [this section property]
-    (let [ v (getKV this section property false) ]
-      (CU/conv-bool (SU/nsb v) false)) )
+    (CU/conv-bool (getKV this section property false) false))
+
   (dbgShow [this]
-    (doseq [ [k v] (seq mapOfSections) ]
-      (do
-        (println (str "[" k "]"))
-        (doseq [ [x y] (seq v) ]
-          (println (str x "=" y)))
-        (println))))
+    (let [ buf (StringBuilder.) ]
+      (doseq [ [k v] (seq mapOfSections) ]
+        (do
+          (.append buf (str "[" k "]\n"))
+          (doseq [ [x y] (seq v) ]
+            (.append buf (str x "=" y)))
+          (.append buf "\n")))
+      (println buf)))
 )
 
 (defmulti ^{ :doc "Parse a INI config file, returning a Win32Conf object." } parse-inifile class)
@@ -139,7 +142,7 @@
   (if (nil? fpath)
     nil
     (parse-inifile (File. fpath))))
-  
+
 (defmethod parse-inifile File
   [^File file]
   (if (or (nil? file) (not (FU/file-read? file)))
@@ -148,7 +151,7 @@
 
 (defmethod parse-inifile URL
   [^URL fileUrl]
-  (if (nil? fileUrl) 
+  (if (nil? fileUrl)
     nil
     (Win32Conf. (parseIniFile fileUrl))))
 

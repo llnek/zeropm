@@ -18,31 +18,30 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.procutils)
+(ns testzotohcljc.i18n.i18nstuff)
 
 (use '[clojure.test])
-(import '(org.apache.commons.io FileUtils))
-(import '(java.io File))
+(require '[comzotohcljc.i18n.i18nutils :as NU])
 (require '[comzotohcljc.util.coreutils :as CU])
-(require '[comzotohcljc.util.procutils :as PU])
 
 
-(def ^:private CUR_MS (System/currentTimeMillis))
-(def ^:private CUR_FP (File. (str (System/getProperty "java.io.tmpdir") "/" CUR_MS)))
+(deftest test-i18nstuff-module
 
-(deftest test-procutils-module
+(is (= "hello joe, how is your dawg" (let [ rs (NU/load-resource (CU/rc-url "com/zotoh/frwk/i18n/Resources_en.properties")) ]
+           (NU/get-string rs "test" [ "joe", "dawg" ]))))
 
-(is (true? (do
-              (PU/coroutine (fn [] (FileUtils/writeStringToFile CUR_FP "heeloo" "utf-8")))
-              (PU/safe-wait 3000)
-              (and (.exists CUR_FP) (>= (.length CUR_FP) 6)))))
 
-(is (> (.length (PU/pid)) 0))
+
+
+
+
+
+
 
 
 )
 
-(def ^:private procutils-eof nil)
+(def ^:private i18nstuff-eof nil)
 
-;;(clojure.test/run-tests 'testzotohcljc.util.procutils)
+(clojure.test/run-tests 'testzotohcljc.i18n.i18nstuff)
 

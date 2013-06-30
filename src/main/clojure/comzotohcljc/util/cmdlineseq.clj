@@ -20,14 +20,15 @@
 
 (ns ^{  :doc "Functions to enable console questions."
         :author "kenl" }
-  comzotohcljc.util.cmdlineseq
-  (:import (java.io BufferedOutputStream InputStreamReader OutputStreamWriter))
-  (:import (java.io Reader Writer))
-  (:import (java.util Properties))
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:require [ comzotohcljc.util.coreutils :as CU])
-  (:require [ comzotohcljc.util.strutils :as SU])
-  )
+  comzotohcljc.util.cmdlineseq)
+
+(import '(java.io BufferedOutputStream InputStreamReader OutputStreamWriter))
+(import '(java.io Reader Writer))
+(import '(java.util Properties))
+(import '(org.apache.commons.lang3 StringUtils))
+(require '[ comzotohcljc.util.coreutils :as CU])
+(require '[ comzotohcljc.util.strutils :as SU])
+
 
 (defrecord CmdSeqQ [qid qline choices dft must onok] )
 

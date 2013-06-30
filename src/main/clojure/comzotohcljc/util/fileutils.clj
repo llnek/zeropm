@@ -19,19 +19,21 @@
 ;;
 
 (ns ^{ :doc "General file related utilities." :author "kenl" }
-  comzotohcljc.util.fileutils
-  (:use [clojure.tools.logging :only (info warn error debug)])  
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:import (java.io
-    File FileInputStream FileOutputStream
-    InputStream OutputStream ))
-  (:import (java.util ArrayList))
-  (:import (org.apache.commons.io FileUtils))
-  (:import (org.apache.commons.io IOUtils))
-  (:import (java.util.zip ZipFile ZipEntry))
-  (:import (com.zotoh.frwk.io XData))
-  (:require [ comzotohcljc.util.coreutils :as CU])
-  )
+  comzotohcljc.util.fileutils)
+
+(use '[clojure.tools.logging :only (info warn error debug)])
+(import '(org.apache.commons.lang3 StringUtils))
+(import '(java.io
+  File FileInputStream FileOutputStream
+  InputStream OutputStream ))
+(import '(java.util ArrayList))
+(import '(org.apache.commons.io FileUtils))
+(import '(org.apache.commons.io IOUtils))
+(import '(java.util.zip ZipFile ZipEntry))
+(import '(com.zotoh.frwk.io XData))
+(require '[ comzotohcljc.util.coreutils :as CU])
+
+
 
 (defn file-readwrite? ^{ :doc "Returns true if file is readable & writable." }
   [^File fp]
@@ -100,8 +102,7 @@
     (FileUtils/deleteQuietly fp)
     (if (.isDiskFile xdata)
       (FileUtils/moveFile (.fileRef xdata) fp)
-      (FileUtils/writeByteArrayToFile fp (.javaBytes xdata)))
-    (info "saved file: " (CU/nice-fpath fp) ", " (.length fp) " (bytes) - OK.")))
+      (FileUtils/writeByteArrayToFile fp (.javaBytes xdata)))))
 
 (defn get-file ^{ :doc "Get a file from a directory." }
   [^File dir ^String fname]

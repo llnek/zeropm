@@ -18,14 +18,17 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns ^{ :doc "OS Process related utilities." :author "kenl" }
-  comzotohcljc.util.procutils
-  (:import (java.lang.management ManagementFactory))
-  (:import (com.zotoh.frwk.util CoreUtils))
-  (:require [ comzotohcljc.util.coreutils :as CU])
-  (:require [ comzotohcljc.util.metautils :as MU])
-  (:require [ comzotohcljc.util.strutils :as SU])
-  )
+(ns ^{ :doc "OS Process related utilities." 
+       :author "kenl" }
+  comzotohcljc.util.procutils)
+
+(import '(java.lang.management ManagementFactory))
+(import '(com.zotoh.frwk.util CoreUtils))
+(require '[ comzotohcljc.util.coreutils :as CU])
+(require '[ comzotohcljc.util.metautils :as MU])
+(require '[ comzotohcljc.util.strutils :as SU])
+
+
 
 (defn async-exec ^{ :doc "Run the code (runnable) in a separate daemon thread." }
   [runable]

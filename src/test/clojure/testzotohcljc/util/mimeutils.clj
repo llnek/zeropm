@@ -18,13 +18,14 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.mimeutils
-  (:use [clojure.test])
-  (:import (java.io File InputStream))
-  (:require [comzotohcljc.util.coreutils :as CU])
-  (:require [comzotohcljc.util.ioutils :as IO])
-  (:require [comzotohcljc.util.mimeutils :as MU])
-  )
+(ns testzotohcljc.util.mimeutils)
+
+(use '[clojure.test])
+(import '(java.io File InputStream))
+(require '[comzotohcljc.util.coreutils :as CU])
+(require '[comzotohcljc.util.ioutils :as IO])
+(require '[comzotohcljc.util.mimeutils :as MU])
+
 
 (eval '(MU/setup-cache (CU/rc-url "com/zotoh/frwk/mime/mime.properties")))
 
@@ -53,7 +54,7 @@
 
 )
 
-(def ^:private test-mimeutils-eof nil)
+(def ^:private mimeutils-eof nil)
 
-(clojure.test/run-tests 'testzotohcljc.util.mimeutils)
+;;(clojure.test/run-tests 'testzotohcljc.util.mimeutils)
 

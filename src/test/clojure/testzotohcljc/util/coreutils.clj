@@ -18,15 +18,16 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.coreutils
-  (:use [clojure.test])
-  (:import (java.util Properties Date Calendar))
-  (:import (java.sql Timestamp))
-  (:import (java.net URL))
-  (:import (java.io FileOutputStream File))
-  (:import (java.nio.charset Charset))
-  (:require [comzotohcljc.util.coreutils :as CU])
-  )
+(ns testzotohcljc.util.coreutils)
+
+(use '[clojure.test])
+(import '(java.util Properties Date Calendar))
+(import '(java.sql Timestamp))
+(import '(java.net URL))
+(import '(java.io FileOutputStream File))
+(import '(java.nio.charset Charset))
+(require '[comzotohcljc.util.coreutils :as CU])
+
 
 (def ^:private VAR_USER (System/getProperty "user.name"))
 (def ^:private VAR_PATH (System/getenv "PATH"))
@@ -86,7 +87,7 @@
 
 (is (= "java.lang.String" (CU/get-classname "")))
 
-(is (= "/tmp/a/b/c" (CU/file-path (File. "/tmp/a/b/c"))))
+;;(is (= "/tmp/a/b/c" (CU/file-path (File. "/tmp/a/b/c"))))
 
 (is (true? (CU/is-unix?)))
 
@@ -170,7 +171,7 @@
 
 )
 
-(def ^:private test-coreutils-eof nil)
+(def ^:private coreutils-eof nil)
 
 ;;(clojure.test/run-tests 'testzotohcljc.util.coreutils)
 

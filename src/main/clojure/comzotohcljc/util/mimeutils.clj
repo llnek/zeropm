@@ -18,21 +18,24 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns ^{ :doc "This is a utility class that provides various MIME related functionality." :author "kenl" }
-  comzotohcljc.util.mimeutils
-  (:use [clojure.tools.logging :only (info warn error debug)])
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:import (java.net URLDecoder URLEncoder))
-  (:import (java.io InputStream File))
-  (:import (java.net URL))
-  (:import (java.util.regex Pattern))
-  (:import (java.util Properties))
-  (:import (javax.mail Message))
-  (:require [comzotohcljc.util.coreutils :as CU])
-  (:require [comzotohcljc.util.metautils :as MU])
-  (:require [comzotohcljc.util.strutils :as SU])
-  (:require [comzotohcljc.util.ioutils :as IO])
-  )
+(ns ^{ :doc "This is a utility class that provides various MIME related functionality." 
+       :author "kenl" }
+  comzotohcljc.util.mimeutils)
+
+(use '[clojure.tools.logging :only (info warn error debug)])
+(import '(org.apache.commons.lang3 StringUtils))
+(import '(java.net URLDecoder URLEncoder))
+(import '(java.io InputStream File))
+(import '(java.net URL))
+(import '(java.util.regex Pattern))
+(import '(java.util Properties))
+(import '(javax.mail Message))
+(require '[comzotohcljc.util.coreutils :as CU])
+(require '[comzotohcljc.util.metautils :as MU])
+(require '[comzotohcljc.util.strutils :as SU])
+(require '[comzotohcljc.util.ioutils :as IO])
+
+
 
 (def ^:dynamic *CTE_QUOTED* "quoted-printable")
 (def ^:dynamic *CTE_7BIT* "7bit")
@@ -116,16 +119,15 @@
 
 (defn- is-pkcs7mime? "" [s] (>= (.indexOf s "application/x-pkcs7-mime") 0))
 
-
-(defn mime-cache { :doc "" }
+(defn mime-cache { :doc "Cache of most MIME types." }
   []
   @_mime_cache)
 
 (defn get-charset ^{ :doc "Get charset from this content-type string." }
   [^String cType]
   (let [ pos (-> (SU/nsb cType) (.toLowerCase) (.indexOf "charset="))
-       ;;rc "ISO-8859-1"
          rc "utf-8" ]
+         ;;rc "ISO-8859-1" ]
     (if (> pos 0)
       (let [ s (.substring cType (+ pos 8)) p (StringUtils/indexOfAny s "; \t\r\n") ]
         (if (> p 0) (.substring s 0 p) s))

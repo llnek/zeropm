@@ -18,30 +18,31 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.crypto.mimestuff
-  (:use [clojure.test])
-  (:import (org.apache.commons.io FileUtils IOUtils))
-  (:import (java.security Policy KeyStore SecureRandom))
-  (:import (java.util Date GregorianCalendar))
-  (:import (java.io File InputStream))
-  (:import (javax.mail Multipart BodyPart))
-  (:import (javax.mail.internet MimeBodyPart MimeMessage MimeMultipart))
-  (:import (javax.activation DataHandler DataSource))
-  (:import (com.zotoh.frwk.crypto SDataSource))
-  (:import (com.zotoh.frwk.io XData))
-  (:require [comzotohcljc.crypto.cryptors :as RT])
-  (:require [comzotohcljc.crypto.stores :as ST])
-  (:require [comzotohcljc.util.coreutils :as CU])
-  (:require [comzotohcljc.util.ioutils :as IO])
-  (:require [comzotohcljc.util.metautils :as MU])
-  (:require [comzotohcljc.crypto.cryptutils :as RU])
-  )
+(ns testzotohcljc.crypto.mimestuff)
+
+(use '[clojure.test])
+(import '(org.apache.commons.io FileUtils IOUtils))
+(import '(java.security Policy KeyStore SecureRandom))
+(import '(java.util Date GregorianCalendar))
+(import '(java.io File InputStream))
+(import '(javax.mail Multipart BodyPart))
+(import '(javax.mail.internet MimeBodyPart MimeMessage MimeMultipart))
+(import '(javax.activation DataHandler DataSource))
+(import '(com.zotoh.frwk.crypto SDataSource))
+(import '(com.zotoh.frwk.io XData))
+(require '[comzotohcljc.crypto.cryptors :as RT])
+(require '[comzotohcljc.crypto.stores :as ST])
+(require '[comzotohcljc.util.coreutils :as CU])
+(require '[comzotohcljc.util.ioutils :as IO])
+(require '[comzotohcljc.util.metautils :as MU])
+(require '[comzotohcljc.crypto.cryptutils :as RU])
 
 
 (def ^:private ROOTPFX (CU/rc-bytes "com/zotoh/frwk/crypto/test.pfx"))
+(def ^:private HELPME (RT/pwdify "helpme"))
 (def ^:private ROOTCS
   (comzotohcljc.crypto.stores.CryptoStore.
-                        (RU/init-store! (RU/get-pkcsStore) ROOTPFX "helpme") "helpme"))
+                        (RU/init-store! (RU/get-pkcsStore) ROOTPFX HELPME) HELPME))
 
 (deftest test-mimestuff-module
 
@@ -54,7 +55,7 @@
                     (not (RU/is-encrypted? mp)) ))))
 
 (is (with-open [ inp (CU/rc-stream "com/zotoh/frwk/mime/mime.eml") ]
-      (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
+      (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) HELPME)
                msg (RU/new-mimeMsg "" "" inp)
                cs (.getCertificateChain pke)
                pk (.getPrivateKey pke)
@@ -62,7 +63,7 @@
         (RU/is-signed? rc))))
 
 (is (with-open [ inp (CU/rc-stream "com/zotoh/frwk/mime/mime.eml") ]
-      (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
+      (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) HELPME)
                msg (RU/new-mimeMsg "" "" inp)
                mp (.getContent msg)
                cs (.getCertificateChain pke)
@@ -71,7 +72,7 @@
         (RU/is-signed? rc))))
 
 (is (with-open [ inp (CU/rc-stream "com/zotoh/frwk/mime/mime.eml") ]
-      (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
+      (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) HELPME)
                msg (RU/new-mimeMsg "" "" inp)
                mp (.getContent msg)
                bp (.getBodyPart mp 1)
@@ -81,7 +82,7 @@
         (RU/is-signed? rc))))
 
 (is (with-open [ inp (CU/rc-stream "com/zotoh/frwk/mime/mime.eml") ]
-      (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
+      (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) HELPME)
                msg (RU/new-mimeMsg "" "" inp)
                cs (.getCertificateChain pke)
                pk (.getPrivateKey pke)
@@ -97,7 +98,7 @@
         (instance? Multipart rc))))
 
 (is (with-open [ inp (CU/rc-stream "com/zotoh/frwk/mime/mime.eml") ]
-      (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
+      (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) HELPME)
                msg (RU/new-mimeMsg "" "" inp)
                cs (.getCertificateChain pke)
                pk (.getPrivateKey pke)
@@ -115,7 +116,7 @@
           false))))
 
 
-(is (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
+(is (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) HELPME)
                 s (SDataSource. (CU/bytesify "hello world") "text/plain")
                 cs (.getCertificateChain pke)
                 pk (.getPrivateKey pke)
@@ -134,7 +135,7 @@
            (and (not (nil? rc))
               (> (.indexOf (CU/stringify rc) "hello world") 0))))
 
-(is (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
+(is (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) HELPME)
                 s2 (SDataSource. (CU/bytesify "what's up dawg") "text/plain")
                 s1 (SDataSource. (CU/bytesify "hello world") "text/plain")
                 cs (.getCertificateChain pke)
@@ -162,7 +163,7 @@
               (> (.indexOf (CU/stringify rc) "hello world") 0))))
 
 
-(is (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) "helpme")
+(is (let [ pke (.keyEntity ROOTCS (first (.keyAliases ROOTCS)) HELPME)
              cs (.getCertificateChain pke)
              pk (.getPrivateKey pke)
              data (XData. "heeloo world")
@@ -217,7 +218,7 @@
 
 )
 
-(def ^:private test-mimestuff-eof nil)
+(def ^:private mimestuff-eof nil)
 
-(clojure.test/run-tests 'testzotohcljc.crypto.mimestuff)
+;;(clojure.test/run-tests 'testzotohcljc.crypto.mimestuff)
 

@@ -18,31 +18,20 @@
 ;; http://www.apache.org/licenses/LICENSE-2.0
 ;;
 
-(ns testzotohcljc.util.procutils)
+(ns testzotohcljc.net.netstuff)
 
+(require '[comzotohcljc.net.netutils :as NU])
+(import '(java.net URL URI))
 (use '[clojure.test])
-(import '(org.apache.commons.io FileUtils))
-(import '(java.io File))
-(require '[comzotohcljc.util.coreutils :as CU])
-(require '[comzotohcljc.util.procutils :as PU])
 
 
-(def ^:private CUR_MS (System/currentTimeMillis))
-(def ^:private CUR_FP (File. (str (System/getProperty "java.io.tmpdir") "/" CUR_MS)))
+(deftest test-netstuff-module
 
-(deftest test-procutils-module
-
-(is (true? (do
-              (PU/coroutine (fn [] (FileUtils/writeStringToFile CUR_FP "heeloo" "utf-8")))
-              (PU/safe-wait 3000)
-              (and (.exists CUR_FP) (>= (.length CUR_FP) 6)))))
-
-(is (> (.length (PU/pid)) 0))
-
+(is (= (do (NU/sync-get (URI. "http://www.google.com")) true)))
 
 )
 
-(def ^:private procutils-eof nil)
+(def ^:private netstuff-eof nil)
 
-;;(clojure.test/run-tests 'testzotohcljc.util.procutils)
+(clojure.test/run-tests 'testzotohcljc.net.netstuff)
 

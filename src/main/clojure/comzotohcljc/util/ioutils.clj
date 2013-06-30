@@ -19,20 +19,21 @@
 ;;
 
 (ns ^{ :doc "Util functions related to stream/io."  :author "kenl" }
-  comzotohcljc.util.ioutils
-  (:import (java.io
-    ByteArrayInputStream ByteArrayOutputStream DataInputStream
-    FileInputStream FileOutputStream CharArrayWriter OutputStreamWriter
-    File InputStream InputStreamReader OutputStream Reader Writer))
-  (:import (java.util.zip GZIPInputStream GZIPOutputStream))
-  (:import (com.zotoh.frwk.io XData XStream))
-  (:import (org.apache.commons.lang3 StringUtils))
-  (:import (org.apache.commons.codec.binary Base64))
-  (:import (org.apache.commons.io IOUtils))
-  (:import (org.xml.sax InputSource))
-  (:import (java.nio.charset Charset))
-  (:require [ comzotohcljc.util.coreutils :as CU])
-  )
+  comzotohcljc.util.ioutils)
+
+(import '(java.io
+  ByteArrayInputStream ByteArrayOutputStream DataInputStream
+  FileInputStream FileOutputStream CharArrayWriter OutputStreamWriter
+  File InputStream InputStreamReader OutputStream Reader Writer))
+(import '(java.util.zip GZIPInputStream GZIPOutputStream))
+(import '(com.zotoh.frwk.io XData XStream))
+(import '(org.apache.commons.lang3 StringUtils))
+(import '(org.apache.commons.codec.binary Base64))
+(import '(org.apache.commons.io IOUtils))
+(import '(org.xml.sax InputSource))
+(import '(java.nio.charset Charset))
+(require '[ comzotohcljc.util.coreutils :as CU])
+
 
 (def ^:private HEX_CHS [ \0 \1 \2 \3 \4 \5 \6 \7 \8 \9 \A \B \C \D \E \F ])
 (def ^:private SZ_10MEG (* 1024 1024 10))
@@ -81,11 +82,12 @@
 
 (defn gzip ^{ :doc "Gzip these bytes." }
   [^bytes bits]
-  (let [ baos (make-baos) ]
-    (when (nil? bits) nil)
-    (with-open [ g (GZIPOutputStream. baos) ]
-          (.write g bits, 0, (alength bits)))
-    (.toByteArray baos)) )
+  (if (nil? bits)
+    nil
+    (let [ baos (make-baos) ]
+      (with-open [ g (GZIPOutputStream. baos) ]
+                (.write g bits, 0, (alength bits)))
+      (.toByteArray baos))))
 
 (defn gunzip ^{ :doc "Gunzip these bytes." }
   [^bytes bits]
@@ -149,14 +151,14 @@
   ([] (make-xdata false))
   ([usefile] (if usefile (XData. (make-tmpfile)) (XData.)) ))
 
-(defn- swap-bytes [inp baos]
+(defn- swap-bytes [baos]
   (let [ bits (.toByteArray baos) t (newly-tmpfile true) ]
     (doto (nth t 1) (.write bits) (.flush))
     (.close baos)
     t))
 
 (defn- swap-read-bytes [inp baos]
-  (let [ t (swap-bytes inp baos) bits (byte-array 4096) os (nth t 1) ]
+  (let [ t (swap-bytes baos) bits (byte-array 4096) os (nth t 1) ]
     (try
       (loop [ c (.read inp bits) ]
         (if (< c 0)
@@ -181,14 +183,14 @@
               (swap-read-bytes inp baos)
               (recur (.read inp bits) (+ c cnt)) )))))) )
 
-(defn- swap-chars [inp wtr]
+(defn- swap-chars [wtr]
   (let [ bits (.toCharArray wtr) t (newly-tmpfile true) os (OutputStreamWriter. (nth t 1)) ]
     (doto os (.write bits) (.flush))
     (.close wtr)
     [t os]))
 
 (defn- swap-read-chars [inp wtr]
-  (let [ v (swap-chars inp wtr) bits (char-array 4096) t (nth v 0) os (nth v 1) ]
+  (let [ v (swap-chars wtr) bits (char-array 4096) t (nth v 0) os (nth v 1) ]
     (try
       (loop [ c (.read inp bits) ]
         (if (< c 0)
