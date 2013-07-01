@@ -159,7 +159,7 @@
       (and (>= rc 300) (< rc 400)) (p-redirect rsp)
       :else (p-error rsp (IOException. (str "Service Error: code = " rc ": " msg))))) )
 
-(defn- do-post [cli ^URI targetUrl contentType ^XData xdata chunkIt beforeSendFunc]
+(defn- do-post [cli ^URL targetUrl contentType ^XData xdata chunkIt beforeSendFunc]
   (try
     (let [ p (HttpPost. targetUrl)
            ent (InputStreamEntity. (.stream xdata) (.size xdata)) ]
@@ -172,12 +172,12 @@
         (.. cli getConnectionManager shutdown))) )
 
 (defn sync-post ^{ :doc "Perform a http-post on the target url." }
-  ([^URI targetUrl contentType ^XData xdata] (sync-post targetUrl contentType xdata false nil))
-  ([^URI targetUrl contentType ^XData xdata chunkIt beforeSendFunc]
+  ([^URL targetUrl contentType ^XData xdata] (sync-post targetUrl contentType xdata false nil))
+  ([^URL targetUrl contentType ^XData xdata chunkIt beforeSendFunc]
     (let [ cli (mkApacheClientHandle) ]
         (do-post cli targetUrl contentType xdata chunkIt beforeSendFunc))) )
 
-(defn- do-get [cli ^URI targetUrl beforeSendFunc]
+(defn- do-get [cli ^URL targetUrl beforeSendFunc]
   (try
     (let [ g (HttpGet. targetUrl) ]
       (when-not (nil? beforeSendFunc) (beforeSendFunc g))
@@ -186,8 +186,8 @@
       (.. cli getConnectionManager shutdown))) )
 
 (defn sync-get ^{ :doc "Perform a http-get on the target url." }
-  ([^URI targetUrl] (sync-get targetUrl nil))
-  ([^URI targetUrl beforeSendFunc]
+  ([^URL targetUrl] (sync-get targetUrl nil))
+  ([^URL targetUrl beforeSendFunc]
     (let [ cli (mkApacheClientHandle) ]
       (do-get cli targetUrl beforeSendFunc))) )
 

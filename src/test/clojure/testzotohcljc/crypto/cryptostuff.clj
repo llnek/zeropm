@@ -97,8 +97,8 @@
 (is (let [ v (RU/make-csrreq 1024 "C=AU,ST=NSW,L=Sydney,O=Google,OU=HQ,CN=www.google.com" "PEM") ]
           (and (= (.size v) 2) (> (alength (first v)) 0) (> (alength (nth v 1)) 0))) )
 
-(is (let [ fout (IO/make-tmpfile "" ".p12")]
-      (RU/make-ssv1PKCS12 (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" SECRET 1024 fout)
+(is (let [ fout (IO/make-tmpfile "kenl" ".p12")]
+      (RU/make-ssv1PKCS12 (Date.) ENDDT "C=AU,ST=NSW,L=Sydney,O=Google" HELPME 1024 fout)
       (> (.length fout) 0)))
 
 (is (let [ fout (IO/make-tmpfile "" ".jks") ]
@@ -128,5 +128,5 @@
 
 (def ^:private cryptostuff-eof nil)
 
-;;(clojure.test/run-tests 'testzotohcljc.crypto.cryptostuff)
+(clojure.test/run-tests 'testzotohcljc.crypto.cryptostuff)
 

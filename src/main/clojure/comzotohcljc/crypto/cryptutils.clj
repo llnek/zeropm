@@ -214,34 +214,6 @@
   []
   (str "" (System/currentTimeMillis) (SN/next-int)))
 
-(defn get-pkcsStore ^{ :doc "Create a PKCS12 key-store." }
-  []
-  (doto (KeyStore/getInstance "PKCS12" *BCProvider*)
-    (.load nil)))
-
-(defn get-jksStore ^{ :doc "Create a JKS key-store." }
-  []
-  (doto (KeyStore/getInstance "JKS" (Security/getProvider "SUN"))
-    (.load nil)))
-
-(defmulti ^{ :doc "Initialize the key-store." } init-store!
-  (fn [a b c]
-    (cond
-      (instance? InputStream b) :stream
-      (instance? File b) :file
-      :else :bytes)))
-
-(defmethod init-store! :stream [^KeyStore store ^InputStream inp ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
-  (let [ ca (if (nil? pwdObj) nil (.toCharArray pwdObj)) ]
-    (doto store (.load (if (nil? inp) nil inp) ca))))
-
-(defmethod init-store! :bytes [^KeyStore store ^bytes bits ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
-  (init-store! store (IO/streamify bits) pwdObj))
-
-(defmethod init-store! :file [^KeyStore store ^File f ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
-  (with-open [ inp (FileInputStream. f) ]
-    (init-store! store inp pwdObj)))
-
 (defn- find-aliases [^KeyStore keystore pred]
   (let [ en (.aliases keystore) ]
     (loop [ rc [] ]
@@ -259,6 +231,53 @@
 (defn pkey-aliases ^{ :doc "Enumerate all key aliases in the key-store." }
   [^KeyStore keystore]
   (find-aliases keystore (fn [ks n] (.isKeyEntry ks n))))
+
+(defn- rego-certs [keystore pwdObj]
+  (let [ ca (.toCharArray pwdObj) ]
+    (doseq [ a (pkey-aliases keystore) ]
+      (let [ cs (-> (.getEntry keystore a (KeyStore$PasswordProtection. ca)) (.getCertificateChain)) ]
+        (doseq [ c (seq cs) ]
+          (.setCertificateEntry keystore (new-alias) c))))))
+
+(defn get-pkcsStore ^{ :doc "Create a PKCS12 key-store." }
+
+  ([^InputStream inp ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
+    (let [ ca (if (nil? pwdObj) nil (.toCharArray pwdObj))
+           ks (doto (KeyStore/getInstance "PKCS12" *BCProvider*)
+                (.load inp ca)) ]
+      (when-not (nil? inp) (rego-certs ks pwdObj))
+      ks))
+
+  ([] (get-pkcsStore nil nil)))
+
+(defn get-jksStore ^{ :doc "Create a JKS key-store." }
+
+  ([^InputStream inp ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
+    (let [ ca (if (nil? pwdObj) nil (.toCharArray pwdObj))
+           ks (doto (KeyStore/getInstance "JKS" (Security/getProvider "SUN"))
+                (.load inp ca)) ]
+      (when-not (nil? inp) (rego-certs ks pwdObj))
+      ks))
+
+  ([] (get-jksStore nil nil)))
+
+(defmulti ^{ :doc "Initialize the key-store." } init-store!
+  (fn [a b c]
+    (cond
+      (instance? InputStream b) :stream
+      (instance? File b) :file
+      :else :bytes)))
+
+(defmethod init-store! :stream [^KeyStore store ^InputStream inp ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
+  (let [ ca (if (nil? pwdObj) nil (.toCharArray pwdObj)) ]
+    (doto store (.load inp ca))))
+
+(defmethod init-store! :bytes [^KeyStore store ^bytes bits ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
+  (init-store! store (IO/streamify bits) pwdObj))
+
+(defmethod init-store! :file [^KeyStore store ^File f ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
+  (with-open [ inp (FileInputStream. f) ]
+    (init-store! store inp pwdObj)))
 
 (defn conv-cert ^{ :doc "Returns a KeyStore$TrustedCertificateEntry." }
   [^bytes bits]

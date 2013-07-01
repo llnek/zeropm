@@ -27,7 +27,7 @@
 
 (deftest test-netstuff-module
 
-(is (= (do (NU/sync-get (URI. "http://www.google.com")) true)))
+(is (= (do (NU/sync-get (URL. "http://www.google.com")) true)))
 
 )
 

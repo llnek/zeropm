@@ -73,22 +73,24 @@
 (defn make-client-bootstrap ^{ :doc "Make a typical netty client bootstrap." }
   []
   (let [ bs (ClientBootstrap. (NioClientSocketChannelFactory.
-                       (Executors/newCachedThreadPool) (Executors/newCachedThreadPool))) ]
+            (Executors/newCachedThreadPool) (Executors/newCachedThreadPool))) ]
     bs))
 
 (defn make-channel-group ^{ :doc "Make a channel group." } [] (DefaultChannelGroup. (CU/uid)))
 
 (defn make-ssl-context ^{ :doc "Make a SSLEngine." }
-  [^URI keyUrl ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
-  (let [ ctx (SSLContext/getInstance "TLS") ]
-    (with-open [ inp (.openStream keyUrl) ]
-      (let [ ks (if (-> keyUrl (.getFile) (.toLowerCase) (.endsWith ".jks")) (CY/get-jksStore) (CY/get-pkcsStore))
-             cs (comzotohcljc.crypto.stores.CryptoStore. (doto ks (CY/init-store! inp pwdObj)) pwdObj) ]
-        (.init ctx
-          (-> cs (.keyManagerFactory ) (.getKeyManagers))
-          (-> cs (.trustManagerFactory) (.getTrustManagers))
-          (CY/get-srand))
-        (doto (.createSSLEngine ctx) (.setUseClientMode false))))) )
+  [^URL keyUrl ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
+  (let [ ctx (SSLContext/getInstance "TLS")
+         ks (with-open [ inp (.openStream keyUrl) ]
+              (if (-> keyUrl (.getFile) (.toLowerCase) (.endsWith ".jks"))
+                        (CY/get-jksStore inp pwdObj)
+                        (CY/get-pkcsStore inp pwdObj)))
+         cs (comzotohcljc.crypto.stores.CryptoStore. ks pwdObj) ]
+         (.init ctx
+            (-> cs (.keyManagerFactory ) (.getKeyManagers))
+            (-> cs (.trustManagerFactory) (.getTrustManagers))
+            (CY/get-srand))
+         (doto (.createSSLEngine ctx) (.setUseClientMode false))))
 
 (defprotocol ^{ :doc "" } NettyServiceIO
   (onerror [this ch msginfo exp] )
@@ -255,15 +257,13 @@
 (defn- mkpipelinefac [^SSLEngine ssleng usercb]
   (reify ChannelPipelineFactory
     (getPipeline [_]
-      (let [ pl (org.jboss.netty.channel.Channels/pipeline) 
-             h (pipelinehdlr usercb) ]
-        (println "******************************")
-        (println h)
+      (let [ pl (org.jboss.netty.channel.Channels/pipeline) ]
         (when-not (nil? ssleng) (.addLast pl "ssl" (SslHandler. ssleng)))
         (doto pl
-          (.addLast "decoder" (HttpServerCodec.))
+          (.addLast "decoder" (HttpRequestDecoder.))
+          (.addLast "encoder" (HttpResponseEncoder.))
           (.addLast "chunker" (ChunkedWriteHandler.))
-          (.addLast "handler" h))
+          (.addLast "handler" (pipelinehdlr usercb)))
         pl))))
 
 (defn- make-xxx-server [host port keyUrl pwdObj usercb]
@@ -272,7 +272,7 @@
           cg (make-channel-group)
           pf (mkpipelinefac ssl usercb) ]
      (.setPipelineFactory bs pf)
-     (.add cg (.bind bs (InetSocketAddress. host port)))
+     (.add cg (.bind bs (InetSocketAddress. host (int port))))
      (debug "memxxxserver: running on host " host ", port " port)
      { :server bs :cgroup cg } ))
 
@@ -295,7 +295,7 @@
     ^comzotohcljc.netty.nettyio.NettyServiceIO usercb] 
    (make-mem-httpd host port vdir nil nil usercb))
 
-  ([host port ^File vdir ^URI keyUrl
+  ([host port ^File vdir ^URL keyUrl
     ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj
     ^comzotohcljc.netty.nettyio.NettyServiceIO usercb]
     (make-xxx-server host port keyUrl pwdObj usercb)))
@@ -357,7 +357,7 @@
 
 (defn make-mem-filer ^{ :doc "" }
   ([host port ^File vdir] (make-mem-filer host port vdir nil nil))
-  ([host port ^File vdir ^URI keyUrl ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
+  ([host port ^File vdir ^URL keyUrl ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
     (make-xxx-server host port keyUrl pwdObj (filer-handler vdir))))
 
 

@@ -88,7 +88,7 @@
            tmp (doto (mkStore keystore) (.load bits ch))
            pp (KeyStore$PasswordProtection. ch)
            pkey (cast KeyStore$PrivateKeyEntry (.getEntry tmp (.nextElement (.aliases tmp)) pp)) ]
-    (.onNewKey this (CO/new-alias) pkey pp)))
+    (onNewKey this (CO/new-alias) pkey pp)))
 
   (addCertEntity [this bits]
     (let [ c (cast X509Certificate (.generateCertificate (CertificateFactory/getInstance "X.509") bits)) ]
