@@ -192,6 +192,9 @@
          (.addMailcap (str "multipart/signed;; "
                   "x-java-content-handler=org.bouncycastle.mail.smime.handlers.multipart_signed") )))
 
+(defn pkcs-file? [^URL keyUrl]
+  (not (-> keyUrl (.getFile) (.toLowerCase) (.endsWith ".jks"))))
+
 (defn make-MsgDigest ^{ :doc "Get a message digest instance." }
   [^String algo]
   (MessageDigest/getInstance (SU/nsb algo) *BCProvider*))
