@@ -59,16 +59,17 @@
 ;; main netty classes
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn make-server-bootstrap ^{ :doc "Make a typical netty server bootstrap." }
-  []
+(defn make-server-bootstrap ^{ :doc "Make a netty server bootstrap." }
+  [options]
   (let [ b (ServerBootstrap. (NioServerSocketChannelFactory.
             (Executors/newCachedThreadPool)
-            (Executors/newCachedThreadPool))) ]
-    (doto b
-      (.setOption "reuseAddress" true)
-      ;; Options for its children
-      (.setOption "child.receiveBufferSize" (int (* 2 1024 1024)))
-      (.setOption "child.tcpNoDelay" true))))
+            (Executors/newCachedThreadPool)))
+         dft { :child.receiveBufferSize (int (* 2 1024 1024))
+               :child.tcpNoDelay true
+               :reuseAddress true }
+         opts (merge dft options) ]
+    (doseq [ en (seq opts) ]
+      (.setOption b (name (first en)) (last en)))))
 
 (defn make-client-bootstrap ^{ :doc "Make a typical netty client bootstrap." }
   []

@@ -52,6 +52,28 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(def http-codes
+     (let [fields (:fields (bean HttpResponseStatus))
+     to-key (comp keyword #(.. % getName toLowerCase (replace \_ \-)))
+     kkeys (map to-key fields)
+     vvals (map (comp str #(.get % nil)) fields)]
+       (into {} (map vec (partition 2 (interleave kkeys vvals))))))
+
+
+
+(def http-codes
+     (let [fields (:fields (bean HttpResponseStatus))
+     to-key (comp int #(.getCode (.get % nil)))
+     kkeys (map to-key fields)
+     vvals (map (comp str #(.get % nil)) fields)]
+       (into {} (map vec (partition 2 (interleave kkeys vvals))))))
+
+           (into-array [(proxy [TrustManager] []
+                          (getAcceptedIssuers [] (make-array X509Certificate 0))
+                          (checkClientTrusted [x y] nil)
+                          (checkServerTrusted [x y] nil))])
+
+
 (defn- cfg-bootstrap!
   ""
   [ssl bs cg cbFunc]
