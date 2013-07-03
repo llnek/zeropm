@@ -23,25 +23,29 @@
 
 (use '[clojure.tools.logging :only (info warn error debug)])
 (import '(org.apache.commons.io FileUtils))
+(import '(org.apache.commons.lang3 StringUtils))
 (import '(java.io IOException ByteArrayOutputStream File InputStream))
+(import '(java.nio ByteBuffer))
 (import '(java.util HashMap))
 (import '(java.net URI URL InetSocketAddress))
 (import '(java.util.concurrent Executors))
 (import '(javax.net.ssl SSLEngine SSLContext))
+(import '(javax.net.ssl X509TrustManager TrustManager))
 (import '(org.jboss.netty.bootstrap Bootstrap ClientBootstrap ServerBootstrap))
 (import '(org.jboss.netty.channel
   ChannelFutureListener Channels SimpleChannelHandler ChannelFuture
   ChannelPipelineFactory ChannelPipeline))
+(import '(org.jboss.netty.buffer ByteBufferBackedChannelBuffer))
 (import '(org.jboss.netty.channel.group
   ChannelGroupFuture ChannelGroup ChannelGroupFutureListener
   DefaultChannelGroup))
 (import '(org.jboss.netty.channel.socket.nio
   NioClientSocketChannelFactory NioServerSocketChannelFactory))
-(import '(org.jboss.netty.handler.codec.http HttpChunkAggregator
+(import '(org.jboss.netty.handler.codec.http HttpChunkAggregator DefaultHttpRequest
   HttpContentCompressor HttpHeaders HttpVersion HttpChunk
   HttpMessage HttpRequest HttpResponse HttpResponseStatus
-  DefaultHttpResponse QueryStringDecoder
-  HttpRequestDecoder HttpServerCodec
+  DefaultHttpResponse QueryStringDecoder HttpMethod 
+  HttpRequestDecoder HttpServerCodec HttpClientCodec
   HttpResponseEncoder))
 (import '(org.jboss.netty.handler.ssl SslHandler))
 (import '(org.jboss.netty.handler.stream ChunkedStream ChunkedWriteHandler))
@@ -56,6 +60,13 @@
 (require '[comzotohcljc.util.ioutils :as IO])
 (require '[comzotohcljc.util.coreutils :as CU])
 
+
+(def ^:dynamic *HTTP-CODES*
+     (let [fields (:fields (bean HttpResponseStatus))
+     to-key (comp int #(.getCode (.get % nil)))
+     kkeys (map to-key fields)
+     vvals (map (comp str #(.get % nil)) fields)]
+       (into {} (map vec (partition 2 (interleave kkeys vvals))))))
 
 
 
@@ -76,22 +87,23 @@
          opts (merge dft options) ]
     (doseq [ en (seq opts) ]
       (.setOption bs (name (first en)) (last en)))
-    bs))
+    [bs opts]))
 
 (defn- make-client-bootstrap ^{ :doc "Make a netty client bootstrap." }
   [options]
   (let [ bs (ClientBootstrap. (NioClientSocketChannelFactory.
             (Executors/newCachedThreadPool) (Executors/newCachedThreadPool)))
-         dft {}
+         dft { :tcpNoDelay true
+               :keepAlive true }
          opts (merge dft options) ]
     (doseq [ en (seq opts) ]
       (.setOption bs (name (first en)) (last en)))
-    bs))
+    [bs opts]))
 
 (defn- make-channel-group ^{ :doc "Make a channel group." }
   [] (DefaultChannelGroup. (CU/uid)))
 
-(defn- make-ssl-context ^{ :doc "Make a SSLEngine." }
+(defn- make-sslServer ^{ :doc "Make a server-side SSLContext." }
   [^URL keyUrl ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
   (let [ ctx (SSLContext/getInstance "TLS")
          ks (with-open [ inp (.openStream keyUrl) ]
@@ -105,17 +117,28 @@
       (CY/get-srand))
     ctx))
 
+(defn- make-sslClient ^{ :doc "Make a client-side SSLContext." }
+  ;;[^URL keyUrl ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
+  [ssl]
+  (if (not ssl)
+    nil
+    (let [ ctx (SSLContext/getInstance "TLS") ]
+      (.init ctx nil (into-array TrustManager [(CY/make-simpleTrustMgr)]) nil)
+      ctx)))
+
 (defn- make-resp-status
   ([] (make-resp-status HttpResponseStatus/OK))
   ([status]
     (DefaultHttpResponse. (HttpVersion/HTTP_1_1) status)))
 
 (defprotocol ^{ :doc "" } NettyServiceIO
+  (before-send [_ ch msg] )
   (onerror [_ ch msginfo exp] )
   (onreq [_ ch msginfo xdata] )
   (onres [_ ch msginfo xdata] ))
 
-(defrecord NettyServer [ ^ServerBootstrap server ^ChannelGroup cgroup ])
+(defrecord NettyServer [ ^ServerBootstrap server ^ChannelGroup cgroup options])
+(defrecord NettyClient [ ^ClientBootstrap client ^ChannelGroup cgroup options])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; private helpers
@@ -200,8 +223,11 @@
     (when (and (> clen 0) (instance? ByteArrayOutputStream os))
       (.resetContent xdata os))
     (cond
-      (= dir -1) (.onres usercb ch info xdata)
-      (= dir 1) (.onreq usercb ch info xdata)
+      (= dir -1) (do
+                   (CU/TryC (.close ch))
+                   (.onres usercb ch info xdata))
+      (= dir 1) (do 
+                  (.onreq usercb ch info xdata))
       :else nil)
     ))
 
@@ -310,7 +336,7 @@
 
     ))
 
-(defn- mkpipelinefac [^SSLContext sslctx usercb]
+(defn- make-pipeServer [^SSLContext sslctx usercb]
   (reify ChannelPipelineFactory
     (getPipeline [_]
       (let [ pl (org.jboss.netty.channel.Channels/pipeline)
@@ -319,20 +345,39 @@
                     (doto (.createSSLEngine sslctx)(.setUseClientMode false))) ]
         (when-not (nil? eg) (.addLast pl "ssl" (SslHandler. eg)))
         (doto pl
-          (.addLast "decoder" (HttpRequestDecoder.))
-          (.addLast "encoder" (HttpResponseEncoder.))
+          ;;(.addLast "decoder" (HttpRequestDecoder.))
+          ;;(.addLast "encoder" (HttpResponseEncoder.))
+          (.addLast "codec" (HttpServerCodec.))
           (.addLast "chunker" (ChunkedWriteHandler.))
           (.addLast "handler" (pipelinehdlr usercb))) ))))
 
-(defn- make-xxx-server [host port keyUrl pwdObj usercb options]
-   (let [ ssl (if (nil? keyUrl) nil (make-ssl-context keyUrl pwdObj))
-          bs (make-server-bootstrap options)
+(defn- make-pipeClient [^SSLContext sslctx usercb]
+  (reify ChannelPipelineFactory
+    (getPipeline [_]
+      (let [ pl (org.jboss.netty.channel.Channels/pipeline)
+             eg (if (nil? sslctx)
+                    nil
+                    (doto (.createSSLEngine sslctx)(.setUseClientMode true))) ]
+        (when-not (nil? eg) (.addLast pl "ssl" (SslHandler. eg)))
+        (doto pl
+          ;;(.addLast "decoder" (HttpRequestDecoder.))
+          ;;(.addLast "encoder" (HttpResponseEncoder.))
+          (.addLast "codec" (HttpClientCodec.))
+          (.addLast "chunker" (ChunkedWriteHandler.))
+          (.addLast "handler" (pipelinehdlr usercb))) ))))
+
+(defn- make-xxx-server 
+  ([host port keyUrl pwdObj usercb ] (make-xxx-server host port keyUrl pwdObj usercb {}))
+  ([host port keyUrl pwdObj usercb options]
+   (let [ ssl (if (nil? keyUrl) nil (make-sslServer keyUrl pwdObj))
+          rc (make-server-bootstrap options)
+          bs (first rc)
           cg (make-channel-group)
-          pf (mkpipelinefac ssl usercb) ]
+          pf (make-pipeServer ssl usercb) ]
      (.setPipelineFactory bs pf)
      (.add cg (.bind bs (InetSocketAddress. host (int port))))
      (debug "netty-xxx-server: running on host " host ", port " port)
-     (NettyServer. bs cg ) ))
+     (NettyServer. bs cg (last rc)) )))
 
 (defn- kill-9 [^ServerBootstrap bs]
     (do (.releaseExternalResources bs)))
@@ -352,7 +397,7 @@
   ([host port ^File vdir ^URL keyUrl
     ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj
     ^comzotohcljc.netty.nettyio.NettyServiceIO usercb]
-    (make-xxx-server host port keyUrl pwdObj usercb {} )))
+    (make-xxx-server host port keyUrl pwdObj usercb )))
 
 (defn- reply-xxx [ch status]
   (let [ res (make-resp-status status)
@@ -391,6 +436,7 @@
                       (reply-get-vfile ch xdata)
                       (reply-xxx ch (HttpResponseStatus/NO_CONTENT))))) ]
     (reify NettyServiceIO
+      (before-send [_ ch msg] nil)
       (onerror [_ ch msginfo exp]
         (do
           (error exp)
@@ -411,7 +457,122 @@
 (defn make-mem-filer ^{ :doc "" }
   ([host port ^File vdir] (make-mem-filer host port vdir nil nil))
   ([host port ^File vdir ^URL keyUrl ^comzotohcljc.crypto.cryptors.PasswordAPI pwdObj]
-    (make-xxx-server host port keyUrl pwdObj (filer-handler vdir) {} )))
+    (make-xxx-server host port keyUrl pwdObj (filer-handler vdir) )))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; http client functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn make-httpClient ^{ :doc "" }
+  [options]
+  (let [ rc (make-client-bootstrap options)
+         cg (make-channel-group) ]
+    (NettyClient. (first rc) cg (last rc))))
+
+(defn- make-nilServiceIO []
+  (reify NettyServiceIO
+    (before-send [_ ch msg] (debug "HttpClientr: empty before-send." ))
+    (onerror [_ ch msginfo exp] (debug "HttpClientr: empty onerror." ))
+    (onreq [_ ch msginfo xdata] (debug "HttpClientr: empty onreq." ))
+    (onres [_ ch msginfo xdata] (debug "HttpClientr: empty onres." ))))
+
+(defn- iniz-httpClient
+  ([clientr ^URL targetUrl] (iniz-httpClient clientr targetUrl (make-nilServiceIO) ))
+  ([clientr ^URL targetUrl serviceIO]
+    (let [ ctx (make-sslClient (= "https" (.getScheme targetUrl)))
+           host (.getHost targetUrl)
+           pnum (.getPort targetUrl)
+           port (if (< pnum 0) (if (nil? ctx) 80 443) pnum)
+           pl (make-pipeClient ctx serviceIO)
+           cli (:client clientr)
+           cg (:cgroup clientr)
+         ]
+      (debug "HttpClientr: connecting to " host ":" port)
+      (.setPipelineFactory cli pl)
+      (let [ cf (doto (.connect cli (InetSocketAddress. host port))
+                  (.awaitUninterruptibly))
+             ok (.isSuccess cf)
+             e (if (not ok) (.getCause cf) nil) ]
+        (when-not ok
+          (if (nil? e)
+            (throw (IOException. ""))
+            (throw e)))
+        (let [ ch (.getChannel cf) ]
+          (.add cg ch)
+          (debug "HttpClientr: connected to " host ":" port " - OK.")
+          ch)))))
+
+(defn- send-httpClient [ch clientr req xdata serviceIO]
+  (let [ clen (if (nil? xdata) 0 (.size xdata))
+         before-send (:before-send serviceIO)
+         options (:options clientr)
+         uri (.getUri req) ]
+    (doto req
+      (.setHeader (org.jboss.netty.handler.codec.http.HttpHeaders$Names/CONNECTION)
+          (if (:keepAlive options)
+            org.jboss.netty.handler.codec.http.HttpHeaders$Values/KEEP_ALIVE
+            org.jboss.netty.handler.codec.http.HttpHeaders$Values/CLOSE))
+      (.setHeader
+        (org.jboss.netty.handler.codec.http.HttpHeaders$Names/HOST)
+        (.getHost (URL. uri))))
+    (when-not (nil? before-send) (apply before-send req))
+    (let [ ct (.getHeader req "content-type") ]
+      (when (and (StringUtils/isEmpty ct) (not (nil? xdata)))
+        (.setHeader req "content-type" "application/octet-stream")) )
+    (when (> clen 0)
+      (do
+        (debug "HttpClientr: content has length " clen)
+        (.setHeader req "content-length" (str "" clen))))
+    (debug "HttpClientr: about to flush out request (headers)")
+    (let [ cf (doto (.write ch req)
+                (add-listener { :ok #(do (debug "HttpClientr: req headers flushed" )) })) ]
+      (when (> clen 0)
+        (doto
+          (if (> clen (com.zotoh.frwk.io.IOUtils/streamLimit))
+            (.write cf (ChunkedStream. (.stream xdata)))
+            (.write cf (ByteBufferBackedChannelBuffer.
+                         (ByteBuffer/wrap (.javaBytes xdata)))))
+          (add-listener { :ok #(do (debug "HttpClientr: req payload flushed" )) }))))
+    ))
+
+(defn async-post ^{ :doc "" }
+  ([clientr ^URL targetUrl ^XData xdata] (async-post clientr targetUrl xdata (make-nilServiceIO)))
+  ([clientr ^URL targetUrl ^XData xdata serviceIO]
+    (let [ req (DefaultHttpRequest. (HttpVersion/HTTP_1_1)
+                                    (HttpMethod/POST) (.toString targetUrl))
+           ch (iniz-httpClient clientr targetUrl serviceIO) ]
+      (send-httpClient ch clientr req xdata serviceIO))))
+
+(defn async-get ^{ :doc "" }
+  ([clientr ^URL targetUrl] (async-get clientr targetUrl (make-nilServiceIO)))
+  ([clientr ^URL targetUrl serviceIO]
+    (let [ req (DefaultHttpRequest. (HttpVersion/HTTP_1_1)
+                                    (HttpMethod/GET) (.toString targetUrl))
+           ch (iniz-httpClient clientr targetUrl serviceIO) ]
+      (send-httpClient ch clientr req nil serviceIO))))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

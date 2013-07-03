@@ -109,6 +109,7 @@
 (import '(javax.crypto Cipher
   KeyGenerator Mac SecretKey))
 (import '(javax.crypto.spec SecretKeySpec))
+(import '(javax.net.ssl X509TrustManager TrustManager))
 (import '(javax.security.auth.x500 X500Principal))
 (import '(org.apache.commons.codec.binary Hex Base64))
 (import '(org.apache.commons.lang3 StringUtils))
@@ -873,6 +874,13 @@
     []
     (map #(.getPrivateKey %) (seq pkeys))))
 
+
+(defn make-simpleTrustMgr ^{ :doc "" }
+  []
+   (reify X509TrustManager
+      (getAcceptedIssuers [_] (make-array X509Certificate 0))
+      (checkClientTrusted [_ x y] nil)
+      (checkServerTrusted [_ x y] nil)))
 
 
 

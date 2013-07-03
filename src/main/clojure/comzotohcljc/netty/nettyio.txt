@@ -318,6 +318,43 @@
 
 
 
+(defn- xyz [ch]
+  (let [ res (make-resp-status)
+         s (str "<html>hallowed are the ori!</html>")
+         bits (.getBytes s)
+         clen (alength bits)
+         sm (IO/streamify bits)
+         attObj (.getAttachment ch)
+         info (if (nil? attObj) nil (:info attObj))
+         kalive (if (nil? info) false (:keep-alive info)) ]
+    (doto res
+      (.setHeader "content-type" "text/html")
+      (.setHeader "content-length" (SU/nsb clen)))
+    (.write ch res)
+    (-> (.write ch (ChunkedStream. sm))
+      (maybe-keepAlive kalive))))
+
+
+
+(defn MyHTTP []
+    (reify NettyServiceIO
+      (onerror [_ ch msginfo exp]
+        (do
+          (error exp)
+          (reply-xxx ch (HttpResponseStatus/INTERNAL_SERVER_ERROR))))
+      (onres [_ ch msginfo xdata] nil)
+      (onreq [_ ch msginfo xdata]
+        (let [ mtd (.toUpperCase (:method msginfo))
+               uri (:uri msginfo) ]
+          (debug "Method = " mtd ", Uri = " uri)
+          (cond
+            (or (= mtd "POST")(= mtd "PUT")) (xyz ch)
+            (= mtd "GET") (xyz ch)
+            :else (reply-xxx ch (HttpResponseStatus/METHOD_NOT_ALLOWED))))))
+      )
+
+
+
 
 
 (def ^:private nettyio-eof nil)
