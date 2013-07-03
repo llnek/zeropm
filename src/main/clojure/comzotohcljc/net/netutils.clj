@@ -47,63 +47,13 @@
 (require '[comzotohcljc.util.mimeutils :as MM])
 (require '[comzotohcljc.util.strutils :as SU])
 
-
+(def ^:dynamic *socket-timeout* 5000)
 (def ^:dynamic  *LHOST* "localhost")
-
 (def ^:dynamic  *WP_HTTP* "HTTP")
 (def ^:dynamic  *WP_SMTP* "SMTP")
 (def ^:dynamic  *WP_SFTP* "SFTP")
 (def ^:dynamic  *WP_FTP* "FTP")
 (def ^:dynamic  *WP_FILE* "FILE")
-
-;; 2XX: generally OK
-
-(def ^:dynamic  *HTTP_OK*  200)
-(def ^:dynamic  *HTTP_CREATED*  201)
-(def ^:dynamic  *HTTP_ACCEPTED*  202)
-(def ^:dynamic  *HTTP_NOT_AUTHORITATIVE*  203)
-(def ^:dynamic  *HTTP_NO_CONTENT*  204)
-(def ^:dynamic  *HTTP_RESET*  205)
-(def ^:dynamic  *HTTP_PARTIAL*  206)
-
-;; 3XX: relocation/redirect
-
-(def ^:dynamic  *HTTP_MULT_CHOICE*  300)
-(def ^:dynamic  *HTTP_MOVED_PERM*  301)
-(def ^:dynamic  *HTTP_MOVED_TEMP*  302)
-(def ^:dynamic  *HTTP_SEE_OTHER*  303)
-(def ^:dynamic  *HTTP_NOT_MODIFIED*  304)
-(def ^:dynamic  *HTTP_USE_PROXY*  305)
-
-;; 4XX: client error
-
-(def ^:dynamic  *HTTP_BAD_REQUEST*  400)
-(def ^:dynamic  *HTTP_UNAUTHORIZED*  401)
-(def ^:dynamic  *HTTP_PAYMENT_REQUIRED*  402)
-(def ^:dynamic  *HTTP_FORBIDDEN*  403)
-(def ^:dynamic  *HTTP_NOT_FOUND*  404)
-(def ^:dynamic  *HTTP_BAD_METHOD*  405)
-(def ^:dynamic  *HTTP_NOT_ACCEPTABLE*  406)
-(def ^:dynamic  *HTTP_PROXY_AUTH*  407)
-(def ^:dynamic  *HTTP_CLIENT_TIMEOUT*  408)
-(def ^:dynamic  *HTTP_CONFLICT*  409)
-(def ^:dynamic  *HTTP_GONE*  410)
-(def ^:dynamic  *HTTP_LENGTH_REQUIRED*  411)
-(def ^:dynamic  *HTTP_PRECON_FAILED*  412)
-(def ^:dynamic  *HTTP_ENTITY_TOO_LARGE*  413)
-(def ^:dynamic  *HTTP_REQ_TOO_LONG*  414)
-(def ^:dynamic  *HTTP_UNSUPPORTED_TYPE*  415)
-
-;; 5XX: server error
-
-(def ^:dynamic  *HTTP_SERVER_ERROR*  500)
-(def ^:dynamic  *HTTP_INTERNAL_ERROR*  501)
-(def ^:dynamic  *HTTP_BAD_GATEWAY*  502)
-(def ^:dynamic  *HTTP_UNAVAILABLE*  503)
-(def ^:dynamic  *HTTP_GATEWAY_TIMEOUT*  504)
-(def ^:dynamic  *HTTP_VERSION*  505)
-
-(def ^:dynamic *socket-timeout* 5000)
 
 (defrecord HTTPResult [^String content-type ^String encoding ^long content-length ^bytes body])
 
@@ -199,6 +149,95 @@
   (let [ c (SSLContext/getInstance "TLS") ]
     (.init c nil (SSLTrustMgrFactory/getTrustManagers) nil)) )
 
+(defn- clean-str [s]
+  (StringUtils/stripStart (StringUtils/stripEnd s ";,") ";,"))
+
+(defn parse-ie [line]
+  (let [ p1 #".*(MSIE\s*(\S+)\s*).*"
+         m1 (re-matches p1 line)
+         p2 #".*(Windows\s*Phone\s*(\S+)\s*).*"
+         m2 (re-matches p2 line)
+         bw "IE"
+         dt (if (SU/has-nocase? "iemobile") :mobile :pc) ]
+
+    (let [ bv (if (and (not (empty? m1)) (> (.size m1) 2))
+                (clean-str (nth m1 2))
+                "")
+           dev (if (and (not (empty? m2)) (> (.size m2) 2))
+                 { :device-version (clean-str (nth m1 2))
+                  :device-moniker "windows phone"
+                  :device-type :phone }
+                 {} ) ]
+      (merge {:browser :ie :browser-version bv :device-type dt}
+             dev))))
+
+(defn parse-chrome [line]
+  (let [ p1 #".*(Chrome/(\S+)).*"
+         m1 (re-matches p1 line)
+         bv   (if (and (not (empty? m1)) (> (.size m1) 2))
+                (clean-str (nth m1 2))
+                "") ]
+    {:browser :chrome :browser-version bv :device-type :pc }))
+
+(defn parse-kindle [line]
+  (let [ p1 #".*(Silk/(\S+)).*"
+         m1 (re-matches p1 line)
+         bv   (if (and (not (empty? m1)) (> (.size m1) 2))
+                (clean-str (nth m1 2))
+                "") ]
+    { :browser :silk :browser-version bv :device-type :mobile :device-moniker "kindle" } ))
+
+(defn parse-android [line]
+  (let [ p1 #".*(Android\s*(\S+)\s*).*"
+         m1 (re-matches p1 line)
+         bv   (if (and (not (empty? m1)) (> (.size m1) 2))
+                (clean-str (nth m1 2))
+                "") ]
+    { :browser :chrome :browser-version bv :device-type :mobile :device-moniker "android" } ))
+
+(defn parse-ffox [line]
+  (let [ p1 #".*(Firefox/(\S+)\s*).*"
+         m1 (re-matches p1 line)
+         bv   (if (and (not (empty? m1)) (> (.size m1) 2))
+                (clean-str (nth m1 2))
+                "") ]
+    { :browser :firefox :browser-version bv :device-type :pc } ))
+
+(defn parse-safari [line]
+  (let [ p1 #".*(Version/(\S+)\s*).*"
+         m1 (re-matches p1 line)
+         bv   (if (and (not (empty? m1)) (> (.size m1) 2))
+                (clean-str (nth m1 2))
+                "")
+         rc { :browser :safari :browser-version bv :device-type :pc } ]
+    (cond
+      (SU/has-nocase? line "mobile/") (merge rc { :device-type :mobile })
+      (SU/has-nocase? line "iphone") (merge rc { :device-type :phone :device-moniker "iphone" } )
+      (SU/has-nocase? line "ipad") (merge rc { :device-type :mobile :device-moniker "ipad" } )
+      (SU/has-nocase? line "ipod") (merge rc { :device-type :mobile :device-moniker "ipod" } )
+      :else rc )))
+
+
+
+
+(defn parse-userAgentLine ^{ :doc "" }
+  [line]
+  (cond
+    if (_uaStr.indexOf("Safari/") > 0 && _uaStr.indexOf("Mac OS X") > 0) {
+    if ( _uaStr.indexOf("Gecko/") > 0 && _uaStr.indexOf("Firefox/") > 0 ) {
+    if ( _uaStr.indexOf("Windows") > 0 &&  _uaStr.indexOf("Trident/") > 0 ) {
+    if ( _uaStr.indexOf("AppleWebKit/") > 0 && _uaStr.indexOf("Safari/") > 0 &&
+    _uaStr.indexOf("Chrome/") > 0 ) {
+    if ( _uaStr.indexOf("AppleWebKit/") > 0 && _uaStr.indexOf("Safari/") > 0 &&
+    _uaStr.indexOf("Silk/") > 0 ) {
+    if ( _uaStr.indexOf("AppleWebKit/") > 0 && _uaStr.indexOf("Safari/") > 0 &&
+    _uaStr.indexOf("Android") > 0 ) {
+    (parse_ie ua)
+    (parse_chrome ua)
+    (parse_android ua)
+    (parse_kindle ua)
+    (parse_safari ua)
+    (parse_ffox ua)
 
 
 

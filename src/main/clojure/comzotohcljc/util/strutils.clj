@@ -29,6 +29,19 @@
   Iterator StringTokenizer))
 (import '(java.lang StringBuilder))
 
+(defn- lcs [s] (.toLowerCase s))
+(defn- ucs [s] (.toUpperCase s))
+
+(defn has-nocase? ^{ :doc "Returns true if this sub-string is inside this string." }
+  [^String aStr s]
+  (do
+    (>= (.indexOf (lcs aStr) (lcs s)) 0)))
+
+(defn enclose? ^{ :doc "Returns true if this sub-string is inside this string." }
+  [^String aStr s]
+  (do
+    (>= (.indexOf aStr s) 0)))
+
 (defn has? ^{ :doc "Returns true if this character is inside this string." }
   [^String aStr ch]
   (do
@@ -75,9 +88,6 @@
       (if (<= (.length src) chunkLength)
         (if (> (.length src) 0) (conj ret src) ret)
         (recur (conj ret (.substring src 0 chunkLength)) (.substring src chunkLength)) ))))
-
-(defn- lcs [s] (.toLowerCase s))
-(defn- ucs [s] (.toUpperCase s))
 
 (defn hasic-any? ^{ :doc "Tests String.indexOf() against a list of possible args. (ignoring case)." }
   [^String src substrs]

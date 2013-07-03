@@ -1,0 +1,46 @@
+;; 2XX: generally OK
+
+(def ^:dynamic  *HTTP_OK*  200)
+(def ^:dynamic  *HTTP_CREATED*  201)
+(def ^:dynamic  *HTTP_ACCEPTED*  202)
+(def ^:dynamic  *HTTP_NOT_AUTHORITATIVE*  203)
+(def ^:dynamic  *HTTP_NO_CONTENT*  204)
+(def ^:dynamic  *HTTP_RESET*  205)
+(def ^:dynamic  *HTTP_PARTIAL*  206)
+
+;; 3XX: relocation/redirect
+
+(def ^:dynamic  *HTTP_MULT_CHOICE*  300)
+(def ^:dynamic  *HTTP_MOVED_PERM*  301)
+(def ^:dynamic  *HTTP_MOVED_TEMP*  302)
+(def ^:dynamic  *HTTP_SEE_OTHER*  303)
+(def ^:dynamic  *HTTP_NOT_MODIFIED*  304)
+(def ^:dynamic  *HTTP_USE_PROXY*  305)
+
+;; 4XX: client error
+
+(def ^:dynamic  *HTTP_BAD_REQUEST*  400)
+(def ^:dynamic  *HTTP_UNAUTHORIZED*  401)
+(def ^:dynamic  *HTTP_PAYMENT_REQUIRED*  402)
+(def ^:dynamic  *HTTP_FORBIDDEN*  403)
+(def ^:dynamic  *HTTP_NOT_FOUND*  404)
+(def ^:dynamic  *HTTP_BAD_METHOD*  405)
+(def ^:dynamic  *HTTP_NOT_ACCEPTABLE*  406)
+(def ^:dynamic  *HTTP_PROXY_AUTH*  407)
+(def ^:dynamic  *HTTP_CLIENT_TIMEOUT*  408)
+(def ^:dynamic  *HTTP_CONFLICT*  409)
+(def ^:dynamic  *HTTP_GONE*  410)
+(def ^:dynamic  *HTTP_LENGTH_REQUIRED*  411)
+(def ^:dynamic  *HTTP_PRECON_FAILED*  412)
+(def ^:dynamic  *HTTP_ENTITY_TOO_LARGE*  413)
+(def ^:dynamic  *HTTP_REQ_TOO_LONG*  414)
+(def ^:dynamic  *HTTP_UNSUPPORTED_TYPE*  415)
+
+;; 5XX: server error
+
+(def ^:dynamic  *HTTP_SERVER_ERROR*  500)
+(def ^:dynamic  *HTTP_INTERNAL_ERROR*  501)
+(def ^:dynamic  *HTTP_BAD_GATEWAY*  502)
+(def ^:dynamic  *HTTP_UNAVAILABLE*  503)
+(def ^:dynamic  *HTTP_GATEWAY_TIMEOUT*  504)
+(def ^:dynamic  *HTTP_VERSION*  505)
