@@ -46,7 +46,7 @@
       <arg value="comzotohcljc.util.countrycode" />
       <arg value="comzotohcljc.util.dateutils" />
       <arg value="comzotohcljc.util.fileutils" />
-      <arg value="comzotohcljc.util.guid" />
+      <arg value="comzotohcljc.util.guids" />
       <arg value="comzotohcljc.util.ioutils" />
       <arg value="comzotohcljc.util.metautils" />
       <arg value="comzotohcljc.util.procutils" />

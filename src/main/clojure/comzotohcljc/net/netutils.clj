@@ -218,26 +218,20 @@
       :else rc )))
 
 
-
-
-(defn parse-userAgentLine ^{ :doc "" }
-  [line]
+(defn parse-userAgentLine ^{ :doc "Retuns a map of browser/device attributes." }
+  [agentLine]
+  (let [ line (SU/strim agentLine) ]
   (cond
-    if (_uaStr.indexOf("Safari/") > 0 && _uaStr.indexOf("Mac OS X") > 0) {
-    if ( _uaStr.indexOf("Gecko/") > 0 && _uaStr.indexOf("Firefox/") > 0 ) {
-    if ( _uaStr.indexOf("Windows") > 0 &&  _uaStr.indexOf("Trident/") > 0 ) {
-    if ( _uaStr.indexOf("AppleWebKit/") > 0 && _uaStr.indexOf("Safari/") > 0 &&
-    _uaStr.indexOf("Chrome/") > 0 ) {
-    if ( _uaStr.indexOf("AppleWebKit/") > 0 && _uaStr.indexOf("Safari/") > 0 &&
-    _uaStr.indexOf("Silk/") > 0 ) {
-    if ( _uaStr.indexOf("AppleWebKit/") > 0 && _uaStr.indexOf("Safari/") > 0 &&
-    _uaStr.indexOf("Android") > 0 ) {
-    (parse_ie ua)
-    (parse_chrome ua)
-    (parse_android ua)
-    (parse_kindle ua)
-    (parse_safari ua)
-    (parse_ffox ua)
+    (and (SU/embeds? line "Windows") (SU/embeds? line "Trident/")) (parse-ie line)
+    (and (SU/embeds? line "AppleWebKit/")(SU/embeds? line "Safari/")
+      (SU/embeds? line "Chrome/")) (parse-chrome line)
+    (and (SU/embeds? line "AppleWebKit/") (SU/embeds? line "Safari/")
+      (SU/embeds? line "Android")) (parse-android line)
+    (and (SU/embeds? line "AppleWebKit/")(SU/embeds? line "Safari/")
+    (SU/embeds? line "Silk/")) (parse-kindle line)
+    (and (SU/embeds? line "Safari/")(SU/embeds? line "Mac OS X")) (parse-safari)
+    (and (SU/embeds? line "Gecko/")(SU/embeds? line "Firefox/")) (parse-ffox)
+    :else {} )))
 
 
 

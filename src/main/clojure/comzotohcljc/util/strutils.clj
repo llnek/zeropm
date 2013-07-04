@@ -37,7 +37,7 @@
   (do
     (>= (.indexOf (lcs aStr) (lcs s)) 0)))
 
-(defn enclose? ^{ :doc "Returns true if this sub-string is inside this string." }
+(defn embeds? ^{ :doc "Returns true if this sub-string is inside this string." }
   [^String aStr s]
   (do
     (>= (.indexOf aStr s) 0)))
