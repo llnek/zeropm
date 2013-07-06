@@ -43,8 +43,8 @@
     :parent nil
     :id (keyword nm)
     :table nm
-    :indexes #{}
-    :uniques #{}
+    :indexes {}
+    :uniques {}
     :fields {}
     :assocs {} })
 
@@ -62,11 +62,11 @@
 
 (defn with-db-indexes [pojo indices]
   (let [ a (:indexes pojo) ]
-    (assoc pojo :indexes (union a indices))))
+    (assoc pojo :indexes (merge a indices))))
 
 (defn with-db-uniques [pojo uniqs]
   (let [ a (:uniques pojo) ]
-    (assoc pojo :uniques (union a uniqs))))
+    (assoc pojo :uniques (merge a uniqs))))
 
 (defn with-db-field [pojo fid fdef]
   (let [ dft { :column (name fid)
@@ -121,34 +121,32 @@
 
 
 
-
 (defmodel meta-info
   (with-db-field :f0 { :column "F0" :domain :int })
-  (with-db-assoc :a0 { :rhs "meta-affa" :kind :o2m :fkey "" })
+  (with-db-assoc :a0 { :rhs "meta-affa" :kind :o2m :fkey "fk_a0" })
            )
 (defmodel base-info
   (with-db-table-name "BASE_INFO")
   (with-db-parent-model 'meta-info)
-  (with-db-indexes #{ "i1" "i2" })
-  (with-db-uniques #{ "u1" "u2" })
+  (with-db-indexes { :i1 #{ :f1 :f2 } })
+  (with-db-uniques { :u1 #{ :f0 } })
   (with-db-field :f1 { :column "F1" :domain :int })
   (with-db-field :f2 { :column "F2" :domain :long })
-  (with-db-assoc :a1 { :rhs "affa" :kind :o2m :fkey "" })
-  (with-db-assoc :a2 { :rhs "affa" :kind :o2m :fkey "" })
+  (with-db-assoc :a1 { :rhs "affa" :kind :o2m :fkey "fk_a1" })
+  (with-db-assoc :a2 { :rhs "affa" :kind :o2m :fkey "fk_a2" })
            )
 (defmodel tracking-info
   (with-db-table-name "TRACKING_INFO")
   (with-db-parent-model 'base-info)
-  (with-db-indexes #{ "t1" "t2" })
-  (with-db-uniques #{ "t1" "u2" })
+  (with-db-indexes { :i4 #{ :f1 :f2 } })
+  (with-db-uniques { :u2 #{ :f0 } })
   (with-db-field :f1 { :column "F1" :domain :float })
   (with-db-field :f2 { :column "F3" :domain :long })
-  (with-db-assoc :a0 { :rhs "affa" :kind :m2m :fkey "" })
-  (with-db-assoc :a2 { :rhs "poo" :kind :o2m :fkey "" })
+  (with-db-assoc :a0 { :rhs "affa" :kind :m2m :fkey "fk_a0" })
+  (with-db-assoc :a2 { :rhs "poo" :kind :o2m :fkey "fk_a2" })
            )
 
 (def testschema (Schema. [ base-info tracking-info ]))
-(def rc (resolve-schema testschema))
 
 
 (def ^:private dbutils-eof nil)
