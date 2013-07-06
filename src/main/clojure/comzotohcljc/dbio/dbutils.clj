@@ -2,6 +2,7 @@
        :author "kenl" }
   comzotohcljc.dbio.dbutils )
 
+(use '[clojure.tools.logging :only (info warn error debug)])
 (use '[clojure.set])
 
 
@@ -140,8 +141,8 @@
   (with-db-parent-model 'base-info)
   (with-db-indexes { :i4 #{ :f1 :f2 } })
   (with-db-uniques { :u2 #{ :f0 } })
-  (with-db-field :f1 { :column "F1" :domain :float })
-  (with-db-field :f2 { :column "F3" :domain :long })
+  (with-db-field :f1 { :column "F1" :domain :double })
+  (with-db-field :f2 { :column "F3" :domain :bytes })
   (with-db-assoc :a0 { :rhs "affa" :kind :m2m :fkey "fk_a0" })
   (with-db-assoc :a2 { :rhs "poo" :kind :o2m :fkey "fk_a2" })
            )

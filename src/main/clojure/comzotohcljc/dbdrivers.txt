@@ -3,12 +3,10 @@
   comzotohcljc.dbio.dbdrivers)
 
 (use '[clojure.tools.logging :only (info warn error debug)])
+(import '(com.zotoh.frwk.dbio DBIOError))
 (require '[comzotohcljc.util.coreutils :as CU])
 (require '[comzotohcljc.util.strutils :as SU])
 (use '[comzotohcljc.dbio.dbutils])
-
-(import '(com.zotoh.frwk.dbio DBIOError))
-
 
 (def ^:dynamic *USE_DDL_SEP* true)
 (def ^:dynamic *DDL_SEP* "-- :")
@@ -17,12 +15,29 @@
   (getTestString [_] )
   (getId [_] ))
 
+(deftype Postgresql [] DBDriver
+  (getId [_] :postgresql)
+  (getTestString [_] "select 1" ))
+
+(deftype MySQL [] DBDriver
+  (getId [_] :mysql)
+  (getTestString [_] "select version()" ))
+
+(deftype Oracle [] DBDriver
+  (getId [_] :oracle)
+  (getTestString [_] "select 1 from DUAL" ))
+
+(deftype SQLServer [] DBDriver
+  (getId [_] :sqlserver)
+  (getTestString [_] "select count(*) from sysusers" ))
+
+(deftype H2 [] DBDriver
+  (getId [_] :h2)
+  (getTestString [_] "select 1" ))
 
 (defn- getNotNull [db] "NOT NULL")
-
 (defn- getNull [db] "NULL")
-
-(defn getPad [db] "    ")
+(defn- getPad [db] "    ")
 
 (defn- nullClause [db opt?]
   (if opt? (getNull db) (getNotNull db)))
@@ -223,6 +238,95 @@
           (-> drops (.append (genDrop db (.toUpperCase tbl) )))
           (-> body (.append (genOneTable db m))))))
     (str "" drops body (genEndSQL db))))
+
+;; H2
+(defmethod getDateKeyword H2 [db] "TIMESTAMP")
+(defmethod getDoubleKeyword H2 [db] "DOUBLE")
+(defmethod getBlobKeyword H2 [db] "BLOB")
+(defmethod getFloatKeyword H2 [db] "FLOAT")
+(defmethod genAutoInteger H2 [db table fld]
+  (str (getPad db) (:column fld) " " (getIntKeyword db)
+            (if (:pkey fld) " IDENTITY(1) " " AUTO_INCREMENT(1) ")))
+(defmethod genAutoLong H2 [db table fld]
+  (str (getPad db) (:column fld) " " (getLongKeyword db)
+            (if (:pkey fld) " IDENTITY(1) " " AUTO_INCREMENT(1) ")))
+(defmethod genBegin H2 [db table]
+  (str "CREATE CACHED TABLE " table "\n(\n" ))
+(defmethod genDrop H2 [db table]
+  (str "DROP TABLE " table " IF EXISTS CASCADE" (genExec db) "\n\n"))
+
+;; MySQL
+(defmethod getBlobKeyword MySQL [db] "LONGBLOB")
+(defmethod getTSKeyword MySQL [db] "TIMESTAMP")
+(defmethod getDoubleKeyword MySQL [db] "DOUBLE")
+(defmethod getFloatKeyword MySQL [db]  "DOUBLE")
+
+(defmethod genEnd MySQL [db table]
+  (str "\n) Type=InnoDB" (genExec db) "\n\n"))
+(defmethod genAutoInteger MySQL [db table fld]
+  (str (getPad db) (:column fld) " " (getIntKeyword db) " NOT NULL AUTO_INCREMENT"))
+(defmethod genAutoLong MySQL [db table fld]
+  (str (getPad db) (:column fld) " " (getLongKeyword db) " NOT NULL AUTO_INCREMENT"))
+
+(defmethod genDrop MySQL [db table]
+  (str "DROP TABLE IF EXISTS " table (genExec db) "\n\n"))
+
+;; Oracle
+(defmethod getStringKeyword Oracle [db] "VARCHAR2")
+(defmethod getTSDefault Oracle [db] "DEFAULT SYSTIMESTAMP")
+(defmethod getLongKeyword Oracle [db] "NUMBER(38)")
+(defmethod getDoubleKeyword Oracle [db] "BINARY_DOUBLE")
+(defmethod getFloatKeyword Oracle [db] "BINARY_FLOAT")
+(defmethod genAutoInteger Oracle [db table fld]
+  ;;_ids.put(table, fld)
+  (genInteger db fld))
+(defmethod genAutoLong Oracle [db table fld]
+  ;;_ids.put(table, fld)
+  (genLong db fld))
+(defmethod genEndSQL Oracle [db] "")
+  ;;(str (create_sequence t._1) (create_sequence_trigger t._1, t._2.getId)))
+(defmethod genDrop Oracle [db table]
+  (str "DROP TABLE " table " CASCADE CONSTRAINTS PURGE" (genExec db) "\n\n"))
+
+;; Postgresql
+(defmethod getTSKeyword Postgresql [db] "TIMESTAMP WITH TIME ZONE")
+(defmethod getBlobKeyword Postgresql [db] "BYTEA")
+(defmethod getDoubleKeyword Postgresql [db] "DOUBLE PRECISION")
+(defmethod getFloatKeyword Postgresql [db] "REAL")
+
+(defmethod genCal Postgresql [db fld] (genTimestamp fld))
+
+(defmethod genAutoInteger Postgresql [db table fld]
+  (str (getPad db) (:column fld) " " "SERIAL"))
+
+(defmethod genAutoLong Postgresql [db table fld]
+  (str (getPad db) (:column fld) " " "BIGSERIAL"))
+
+(defmethod genDrop Postgresql [db table]
+  (str "DROP TABLE IF EXISTS " table " CASCADE" (genExec db) "\n\n"))
+
+;; SQLServer
+(defmethod getBlobKeyword SQLServer [db] "IMAGE")
+(defmethod getTSKeyword SQLServer [db] "DATETIME")
+(defmethod getDoubleKeyword SQLServer [db] "FLOAT(53)")
+(defmethod getFloatKeyword SQLServer [db] "FLOAT(53)")
+
+(defmethod genAutoInteger SQLServer [db table fld]
+  (str (getPad db) (:column fld) " " (getIntKeyword db)
+    (if (:pkey fld) " IDENTITY (1,1) " " AUTOINCREMENT ")))
+
+(defmethod genAutoLong SQLServer [db table fld]
+  (str (getPad db) (:column fld) " " (getLongKeyword db)
+    (if (:pkey fld) " IDENTITY (1,1) " " AUTOINCREMENT ")))
+
+(defmethod genDrop SQLServer [db table]
+  (str "IF EXISTS (SELECT * FROM dbo.sysobjects WHERE id=object_id('"
+       table "')) DROP TABLE " table (genExec db) "\n\n"))
+
+
+(println (getDDL (POSTGRESQL.) (make-MetaCache testschema)))
+
+
 
 (def ^:private dbdrivers-eof nil)
 
