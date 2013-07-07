@@ -17,6 +17,7 @@
   (getTestString [_] )
   (getId [_] ))
 
+(defn- getcolname [flds fid] (:column (get flds fid)))
 
 (defn- getNotNull [db] "NOT NULL")
 
@@ -50,9 +51,9 @@
 (defmulti genEndSQL (fn [a & more] (class a)))
 (defmethod genEndSQL :default [db] "")
 
-(defn- genColDef [db col ty opt? dft]
-  (str (getPad db) col " " ty " " (nullClause db opt?)
-       (if (SU/hgl? dft) (str " DEFAULT "  dft) "")))
+(defn genColDef [db col ty opt? dft]
+  (str (getPad db) (.toUpperCase col) " " ty " " (nullClause db opt?)
+       (if (nil? dft) "" (str " DEFAULT " dft))))
 
 (defmulti getFloatKeyword (fn [a & more] (class a)))
 (defmethod getFloatKeyword :default [db] "FLOAT")
@@ -83,19 +84,19 @@
 
 (defmulti genBytes (fn [a & more] (class a)))
 (defmethod genBytes :default [db fld]
-  (genColDef db (:column fld) (getBlobKeyword db) (:null fld) ""))
+  (genColDef db (:column fld) (getBlobKeyword db) (:null fld) nil))
 
 (defmulti genString (fn [a & more] (class a)))
 (defmethod genString :default [db fld]
   (genColDef  db (:column fld)
     (str (getStringKeyword db) "(" (:size fld) ")")
     (:null fld)
-    (if (:default fld) (:default-value fld) "")))
+    (if (:default fld) (:default-value fld) nil)))
 
 (defmulti genInteger (fn [a & more] (class a)))
 (defmethod genInteger :default [db fld]
   (genColDef db (:column fld) (getIntKeyword db) (:null fld)
-    (if (:default fld) (:default-value fld) "")))
+    (if (:default fld) (:default-value fld) nil)))
 
 (defmulti genAutoInteger (fn [a & more] (class a)))
 (defmethod genAutoInteger :default [db table fld] "")
@@ -103,17 +104,17 @@
 (defmulti genDouble (fn [a & more] (class a)))
 (defmethod genDouble :default [db fld]
   (genColDef db (:column fld) (getDoubleKeyword db) (:null fld)
-    (if (:default fld) (:default-value fld) "")))
+    (if (:default fld) (:default-value fld) nil)))
 
 (defmulti genFloat (fn [a & more] (class a)))
 (defmethod genFloat :default [db fld]
   (genColDef db (:column fld) (getFloatKeyword db) (:null fld)
-    (if (:default fld) (:default-value fld) "")))
+    (if (:default fld) (:default-value fld) nil)))
 
 (defmulti genLong (fn [a & more] (class a)))
 (defmethod genLong :default [db fld]
   (genColDef db (:column fld) (getLongKeyword db) (:null fld)
-    (if (:default fld) (:default-value fld) "")))
+    (if (:default fld) (:default-value fld) nil)))
 
 (defmulti genAutoLong (fn [a & more] (class a)))
 (defmethod genAutoLong :default [db table fld] "")
@@ -124,12 +125,12 @@
 (defmulti genTimestamp (fn [a & more] (class a)))
 (defmethod genTimestamp :default [db fld]
   (genColDef db (:column fld) (getTSKeyword db) (:null fld)
-    (if (:default fld) (getTSDefault db) "")))
+    (if (:default fld) (getTSDefault db) nil)))
 
 (defmulti genDate (fn [a & more] (class a)))
 (defmethod genDate :default [db fld]
   (genColDef db (:column fld) (getDateKeyword db) (:null fld)
-    (if (:default fld) (getTSDefault db) "")))
+    (if (:default fld) (getTSDefault db) nil)))
 
 (defmulti genCal (fn [a & more] (class a)))
 (defmethod genCal :default [db fld] (genTimestamp db fld))
@@ -137,28 +138,30 @@
 (defmulti genBool (fn [a & more] (class a)))
 (defmethod genBool :default [db fld]
   (genColDef db (:column fld) (getBoolKeyword db) (:null fld)
-      (if (:default fld) (:default-value fld) "")))
+      (if (:default fld) (:default-value fld) nil)))
 
 (defn- genExIndexes [db table zm]
-  (let [ m (:indexes zm) bf (StringBuilder.) ]
+  (let [ flds (:fields zm) m (:indexes zm) bf (StringBuilder.) ]
     (doseq [ en (seq m) ]
-      (let [ nm (first en) cols (last en) ]
+      (let [ nm (first en) cols (map #(getcolname flds %) (last en)) ]
         (when (empty? cols) (throw (DBIOError. (str "Cannot have empty index: " nm))))
-        (.append bf (str "CREATE INDEX " (.toLowerCase (str table "_" nm)) " ON " table
+        (.append bf (str "CREATE INDEX " 
+                         (.toLowerCase (str table "_" (name nm)))
+                         " ON " table
                     " ( " (clojure.string/join "," cols) " )" (genExec db) "\n\n" ))))
     (.toString bf)))
 
 (defn- genUniques [db zm]
-  (let [ m (:uniques zm) bf (StringBuilder.) ]
+  (let [ flds (:fields zm) m (:uniques zm) bf (StringBuilder.) ]
     (doseq [ en (seq m) ]
-      (let [ nm (first en) cols (last en) ]
-        (when (empty? cols) (throw (DBIOError. (str "Cannot have empty unique: " nm))))
+      (let [ nm (first en) cols (map #(getcolname flds %) (last en)) ]
+        (when (empty? cols) (throw (DBIOError. (str "Cannot have empty unique: " (name nm)))))
         (SU/add-delim! bf ",\n"
             (str (getPad db) "UNIQUE(" (clojure.string/join "," cols) ")"))))
     (.toString bf)))
 
-(defn- genPrimaryKey [db pkeys]
-  (str (getPad db) "PRIMARY KEY(" (clojure.string/join "," pkeys) ")"))
+(defn- genPrimaryKey [db zm pks]
+    (str (getPad db) "PRIMARY KEY(" (clojure.string/join "," pks) ")"))
 
 (defn- genBody [db table zm]
   (let [ inx (StringBuilder.) bf (StringBuilder.) pkeys (atom #{})
@@ -185,9 +188,11 @@
     (doseq [ en (seq (:assocs zm)) ]
       (let [ soc (last en) cn (.toUpperCase (:fkey soc))
              pos @iix
-             col (genColDef db cn (getLongKeyword db) true "") ]
+             col (genColDef db cn (getLongKeyword db) true nil) ]
         (SU/add-delim! bf ",\n" col)
-        (.append inx (str "CREATE INDEX " table "_x" pos " ON " table
+        (.append inx (str "CREATE INDEX " 
+                          (.toLowerCase (str table "_x" pos))
+                          " ON " table
                         " ( "  cn " )" (genExec db) "\n\n"))
         (reset! iix (inc pos))))
     ;; now explicit indexes
@@ -195,7 +200,7 @@
     ;; now uniques, primary keys and done.
     (when (> (.length bf) 0)
       (when (> (.size @pkeys) 0)
-        (.append bf (str ",\n" (genPrimaryKey db @pkeys))))
+        (.append bf (str ",\n" (genPrimaryKey db zm @pkeys))))
       (let [ s (genUniques db zm) ]
         (when (SU/hgl? s)
           (.append bf (str ",\n" s)))))

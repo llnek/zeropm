@@ -21,10 +21,10 @@
 (defmethod genCal Postgresql [db fld] (genTimestamp fld))
 
 (defmethod genAutoInteger Postgresql [db table fld]
-  (str (getPad db) (:column fld) " " "SERIAL"))
+  (genColDef db (:column fld) "SERIAL" false nil))
 
 (defmethod genAutoLong Postgresql [db table fld]
-  (str (getPad db) (:column fld) " " "BIGSERIAL"))
+  (genColDef db (:column fld) "BIGSERIAL" false nil))
 
 (defmethod genDrop Postgresql [db table]
   (str "DROP TABLE IF EXISTS " table " CASCADE" (genExec db) "\n\n"))

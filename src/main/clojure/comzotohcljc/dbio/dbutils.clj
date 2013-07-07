@@ -39,8 +39,8 @@
   MetaCacheAPI
   (getMetas [_] theMetas))
 
-(defn- make-model [nm]
-  { :pk :dbio_rowid
+(defn make-model [nm]
+  {
     :parent nil
     :id (keyword nm)
     :table nm
@@ -51,7 +51,18 @@
 
 (defmacro defmodel ^{ :doc "" }
   ([model-name & body]
-     `(let [ p#  (-> (make-model ~(name model-name)) ~@body) ]
+     `(let [ p#  (-> (make-model ~(name model-name))
+                        (with-db-fields {
+                                :rowid {:column "dbio_rowid" :pkey true :domain :long 
+                                        :auto true :system true :updatable false}
+                                :verid {:column "dbio_version" :domain :long :system true 
+                                        :default true :default-value 0}
+                                :last-mod {:column "dbio_lastchanged" :domain :timestamp 
+                                           :system true :default true}
+                                :created-on {:column "dbio_created_on" :domain :timestamp 
+                                              :system true :default true :updatable false}
+                                :created-by {:column "dbio_created_by" :system true :domain :string } })
+                   ~@body) ]
       (def ~model-name  p#))))
 
 
@@ -73,8 +84,9 @@
   (let [ dft { :column (name fid)
                :size 255 
                :domain :string 
+               :pkey false
                :null true 
-               :autogen false 
+               :auto false 
                :dft false 
                :dft-value "" 
                :updatable true 
@@ -85,12 +97,24 @@
          nm (assoc fm fid fd) ]
     (assoc pojo :fields nm)))
 
+(defn with-db-fields [pojo flddefs]
+  (let [ rcmap (atom pojo) ]
+    (doseq [ en (seq flddefs) ]
+      (reset! rcmap (with-db-field @rcmap (first en) (last en))))
+    @rcmap))
+
 (defn with-db-assoc [pojo aid adef]
-  (let [ dft { :kind nil :rhs nil :fkey "" }
+  (let [ dft { :kind nil :rhs nil :fkey "" :singly false }
          ad (merge dft adef)
          am (:assocs pojo)
          nm (assoc am aid ad) ]
     (assoc pojo :assocs nm)))
+
+(defn with-db-assocs [pojo assocs]
+  (let [ rcmap (atom pojo) ]
+    (doseq [ en (seq assocs) ]
+      (reset! rcmap (with-db-assoc @rcmap (first en) (last en))))
+    @rcmap))
 
 (defn- nested-merge [src des]
   (cond
@@ -120,6 +144,35 @@
 
 
 
+
+
+(defmodel address
+  (with-db-fields {
+    :addr1 { :size 200 :null false }
+    :addr2 { :size 64}
+    :city { :null false}
+    :state {:null false}
+    :zip {:null false}
+    :country {:null false}
+                   }))
+
+(defmodel person
+  (with-db-fields {
+    :fname { :null false }
+    :lname { :null false }
+    :age { :domain :int }
+    :pic { :domain :bytes }
+                   })
+  (with-db-assocs {
+    :addr { :kind :o2m :singly true :rhs :address :fkey "fk_person" }
+    :spouse { :kind :o2o :rhs :person :fkey "fk_spouse" }
+    :accts { :kind :o2m :rhs :bankacct :fkey "fk_person" }
+                   }))
+
+(defmodel bankacct
+  (with-db-fields {
+    :amount { :null false :domain :double }
+                   }))
 
 
 (defmodel meta-info
