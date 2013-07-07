@@ -221,13 +221,15 @@
   (let [ ms (.getMetas metaCache)
          drops (StringBuilder.)
          body (StringBuilder.) ]
+    ;;(println ms)
     (doseq [ en (seq ms) ]
-      (let [ m (last en) id (:id m) tbl (:table m) ]
-        (debug "model id: " (name id) " table: " tbl)
-        (when (SU/hgl? tbl)
+      (let [ tdef (last en) id (first en) tbl (:table tdef) ]
+        (when (and (not (:abstract tdef)) (SU/hgl? tbl))
+          (debug "model id: " (name id) " table: " tbl)
           (-> drops (.append (genDrop db (.toUpperCase tbl) )))
-          (-> body (.append (genOneTable db m))))))
+          (-> body (.append (genOneTable db tdef))))))
     (str "" drops body (genEndSQL db))))
+
 
 (def ^:private dbdrivers-eof nil)
 

@@ -1,10 +1,12 @@
-(ns ^{ :doc "" 
+(ns ^{ :doc ""
        :author "kenl" }
   comzotohcljc.dbio.dbutils )
 
 (use '[clojure.tools.logging :only (info warn error debug)])
 (use '[clojure.set])
-
+(import '(com.zotoh.frwk.dbio DBIOError))
+(require '[comzotohcljc.util.coreutils :as CU])
+(require '[comzotohcljc.util.strutils :as SU])
 
 (def ^:dynamic *DBTYPES* {
     :sqlserver { :test-string "select count(*) from sysusers" }
@@ -27,20 +29,17 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(def BASEMODEL-MONIKER :dbio-basemodel)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defprotocol SchemaAPI (getModels [_] ))
-(deftype Schema [theModels]
-  SchemaAPI
-  (getModels [_] theModels))
-
-(defprotocol MetaCacheAPI (getMetas [_] ))
 
 (defn make-model [nm]
   {
     :parent nil
     :id (keyword nm)
     :table nm
+    :abstract false
+    :system false
     :indexes {}
     :uniques {}
     :fields {}
@@ -49,16 +48,6 @@
 (defmacro defmodel ^{ :doc "" }
   ([model-name & body]
      `(let [ p#  (-> (make-model ~(name model-name))
-                        (with-db-fields {
-                                :rowid {:column "dbio_rowid" :pkey true :domain :long 
-                                        :auto true :system true :updatable false}
-                                :verid {:column "dbio_version" :domain :long :system true 
-                                        :default true :default-value 0}
-                                :last-mod {:column "dbio_lastchanged" :domain :timestamp 
-                                           :system true :default true}
-                                :created-on {:column "dbio_created_on" :domain :timestamp 
-                                              :system true :default true :updatable false}
-                                :created-by {:column "dbio_created_by" :system true :domain :string } })
                    ~@body) ]
       (def ~model-name  p#))))
 
@@ -79,15 +68,15 @@
 
 (defn with-db-field [pojo fid fdef]
   (let [ dft { :column (name fid)
-               :size 255 
-               :domain :string 
+               :size 255
+               :domain :string
                :pkey false
-               :null true 
-               :auto false 
-               :dft false 
-               :dft-value "" 
-               :updatable true 
-               :system false 
+               :null true
+               :auto false
+               :dft false
+               :dft-value ""
+               :updatable true
+               :system false
                :index "" }
          fd (merge dft fdef)
          fm (:fields pojo)
@@ -113,34 +102,93 @@
       (reset! rcmap (with-db-assoc @rcmap (first en) (last en))))
     @rcmap))
 
+(defn with-db-abstract [pojo] (assoc pojo :abstract true))
+
+(defn- with-db-system [pojo] (assoc pojo :system true))
+
 (defn- nested-merge [src des]
   (cond
     (and (map? src)(map? des)) (merge src des)
     (and (set? src)(set? des)) (union src des)
     :else des))
 
-(defn- resolve-model [ms m]
-  (let [ par (:parent m)
-         pv (get ms par)
-         pm (if (map? pv) (resolve-model pv) {} )
-         cm (merge-with nested-merge pm m) ]
-    cm))
+(defmodel dbio-basemodel
+  (with-db-abstract)
+  (with-db-system)
+  (with-db-fields {
+    :rowid {:column "dbio_rowid" :pkey true :domain :long
+            :auto true :system true :updatable false}
+    :verid {:column "dbio_version" :domain :long :system true
+            :default true :default-value 0}
+    :last-mod {:column "dbio_lastchanged" :domain :timestamp
+               :system true :default true}
+    :created-on {:column "dbio_created_on" :domain :timestamp
+                  :system true :default true :updatable false}
+    :created-by {:column "dbio_created_by" :system true :domain :string } }))
+  
+(defprotocol MetaCacheAPI (getMetas [_] ))
+(defprotocol SchemaAPI (getModels [_] ))
+(deftype Schema [theModels]
+  SchemaAPI
+  (getModels [_] theModels))
 
-(defn- resolve-models [ms]
-  (reduce (fn [sum m]
-            (let [ rc (resolve-model ms m) ]
+(defn- jiggle-assocs [ms zm]
+  (let [ flds (:fields zm) rels (:assocs zm) mid (:id zm) ]
+    (reduce (fn [sum en]
+              (let [ adef (last en) id (first en)
+                     kind (:kind adef)
+                     rhs (get ms (:rhs adef))
+                     fk (:fkey adef)
+                     fk2  (case kind
+                          :o2m (str "fk_" (name mid))
+                          :o2o (str "fk_" (name id))
+                          :m2m ("")
+                          (throw (DBIOError. (str "Invalid assoc type " kind))))
+                     rf  (if (SU/hgl? fk) fk fk2)
+                    ]
+                (assoc sum id (assoc adef :fkey rf))
+              ))
+            {} (seq rels))))
+
+(defn- jiggle-model [ms m]
+  (let [ nsocs (jiggle-assocs ms m)
+         nm (assoc m :assocs nsocs)
+         nms (assoc ms (:id m) nm) ]
+    nms))
+
+(defn- jiggle-models [ms]
+  (reduce (fn [sum en]
+            (let [ rc (jiggle-model sum (get sum (first en))) ]
+              rc))
+            ms (seq ms)))
+
+(defn- resolve-parent [ms m]
+  (let [ par (:parent m) ]
+    (cond
+      (keyword? par) (if (nil? (get ms par))
+                       (throw (DBIOError. (str "Unknown model " par)))
+                       m)
+      (nil? par) (assoc m :parent BASEMODEL-MONIKER)
+      :else (throw (DBIOError. (str "Invalid parent " par))))))
+
+(defn- resolve-parents [ms]
+  (reduce (fn [sum en]
+            (let [ rc (resolve-parent ms (last en)) ]
               (assoc sum (:id rc) rc)))
             {} (seq ms)))
 
-(defn- mapize-models []
-  )
+(defn- mapize-models [ms]
+  (reduce (fn [sum n] (assoc sum (:id n) n)) {} (seq ms)))
 
 (defn make-MetaCache ^{ :doc "" }
   [schema]
-  (let [ ms (if (nil? schema) [] (.getModels schema))
-         rc (if (empty? ms) {} (resolve-models ms)) ]
+  (let [ ms (if (nil? schema) {} (mapize-models (.getModels schema)))
+         m1 (if (empty? ms) {} (resolve-parents ms))
+         m2 (assoc m1 BASEMODEL-MONIKER dbio-basemodel)
+        ;; m2 (if (empty? m1) {} (jiggle-models m1))
+        ]
     (reify MetaCacheAPI
-      (getMetas [_] rc))))
+      (getMetas [_] m2))))
 
 
 
@@ -156,6 +204,7 @@
                    }))
 
 (defmodel person
+  (with-db-abstract)
   (with-db-fields {
     :fname { :null false }
     :lname { :null false }
@@ -163,9 +212,9 @@
     :pic { :domain :bytes }
                    })
   (with-db-assocs {
-    :addr { :kind :o2m :singly true :rhs :address :fkey "fk_person" }
-    :spouse { :kind :o2o :rhs :person :fkey "fk_spouse" }
-    :accts { :kind :o2m :rhs :bankacct :fkey "fk_person" }
+    :addr { :kind :o2m :singly true :rhs :address }
+    :spouse { :kind :o2o :rhs :person }
+    :accts { :kind :o2m :rhs :bankacct }
                    }))
 
 (defmodel president
@@ -198,7 +247,7 @@
   (with-db-uniques { :u2 #{ :f0 } })
   (with-db-field :f1 { :column "F1" :domain :double })
   (with-db-field :f2 { :column "F3" :domain :bytes })
-  (with-db-assoc :a0 { :rhs "affa" :kind :m2m :fkey "fk_a0" })
+  (with-db-assoc :a0 { :rhs "affa" :kind :o2m :fkey "fk_a0" })
   (with-db-assoc :a2 { :rhs "poo" :kind :o2m :fkey "fk_a2" })
            )
 
