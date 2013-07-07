@@ -35,9 +35,6 @@
   (getModels [_] theModels))
 
 (defprotocol MetaCacheAPI (getMetas [_] ))
-(deftype MetaCache [theMetas]
-  MetaCacheAPI
-  (getMetas [_] theMetas))
 
 (defn make-model [nm]
   {
@@ -122,26 +119,28 @@
     (and (set? src)(set? des)) (union src des)
     :else des))
 
-(defn- resolve-model [m]
+(defn- resolve-model [ms m]
   (let [ par (:parent m)
-         pv (if (symbol? par) (eval par) nil)
+         pv (get ms par)
          pm (if (map? pv) (resolve-model pv) {} )
          cm (merge-with nested-merge pm m) ]
     cm))
 
 (defn- resolve-models [ms]
   (reduce (fn [sum m]
-            (let [ rc (resolve-model m) ]
+            (let [ rc (resolve-model ms m) ]
               (assoc sum (:id rc) rc)))
             {} (seq ms)))
+
+(defn- mapize-models []
+  )
 
 (defn make-MetaCache ^{ :doc "" }
   [schema]
   (let [ ms (if (nil? schema) [] (.getModels schema))
          rc (if (empty? ms) {} (resolve-models ms)) ]
-    (MetaCache. rc)))
-
-
+    (reify MetaCacheAPI
+      (getMetas [_] rc))))
 
 
 
@@ -169,6 +168,9 @@
     :accts { :kind :o2m :rhs :bankacct :fkey "fk_person" }
                    }))
 
+(defmodel president
+  (with-db-parent-model :person))
+
 (defmodel bankacct
   (with-db-fields {
     :amount { :null false :domain :double }
@@ -181,7 +183,7 @@
            )
 (defmodel base-info
   (with-db-table-name "BASE_INFO")
-  (with-db-parent-model 'meta-info)
+  (with-db-parent-model :meta-info)
   (with-db-indexes { :i1 #{ :f1 :f2 } })
   (with-db-uniques { :u1 #{ :f0 } })
   (with-db-field :f1 { :column "F1" :domain :int })
@@ -191,7 +193,7 @@
            )
 (defmodel tracking-info
   (with-db-table-name "TRACKING_INFO")
-  (with-db-parent-model 'base-info)
+  (with-db-parent-model :base-info)
   (with-db-indexes { :i4 #{ :f1 :f2 } })
   (with-db-uniques { :u2 #{ :f0 } })
   (with-db-field :f1 { :column "F1" :domain :double })
@@ -200,7 +202,8 @@
   (with-db-assoc :a2 { :rhs "poo" :kind :o2m :fkey "fk_a2" })
            )
 
-(def testschema (Schema. [ base-info tracking-info ]))
+;;(def testschema (Schema. [ base-info tracking-info ]))
+(def testschema (Schema. [ president address person bankacct ]))
 
 
 (def ^:private dbutils-eof nil)
