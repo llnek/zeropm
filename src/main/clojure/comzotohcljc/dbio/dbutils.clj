@@ -70,6 +70,7 @@
   (let [ dft { :column (name fid)
                :size 255
                :domain :string
+               :assoc-key false
                :pkey false
                :null true
                :auto false
@@ -132,35 +133,43 @@
   SchemaAPI
   (getModels [_] theModels))
 
-(defn- jiggle-assocs [ms zm]
-  (let [ flds (:fields zm) rels (:assocs zm) mid (:id zm) ]
-    (reduce (fn [sum en]
-              (let [ adef (last en) id (first en)
-                     kind (:kind adef)
-                     rhs (get ms (:rhs adef))
-                     fk (:fkey adef)
-                     fk2  (case kind
-                          :o2m (str "fk_" (name mid))
-                          :o2o (str "fk_" (name id))
-                          :m2m ("")
-                          (throw (DBIOError. (str "Invalid assoc type " kind))))
-                     rf  (if (SU/hgl? fk) fk fk2)
-                    ]
-                (assoc sum id (assoc adef :fkey rf))
-              ))
-            {} (seq rels))))
+(defn- resolve-local-assoc [ms zm]
+  (let [ socs (:assocs zm) zid (:id zm) rc (atom #{}) ]
+    (if (or (nil? socs) (empty? socs))
+      @rc
+      (do
+        (doseq [ en (seq socs) ]
+          (let [ soc (last en) id (first en)
+               kind (:kind soc) rhs (:rhs soc)
+               col (case kind
+                  :o2m (str (name rhs) "|" "fk_" (name zid) "_" (name id))
+                  :o2o (str (name zid) "|" "fk_" (name rhs) "_" (name id))
+                  :m2m (if (nil? (get ms (:joined soc)))
+                              (throw (DBIOError. (str "Missing joined model for m2m assoc " id)))
+                         "")
+                  (throw (DBIOError. (str "Invalid assoc type " kind)))) ]
+            (when (SU/hgl? col) (reset! rc (conj @rc col)))))
+        @rc))))
 
-(defn- jiggle-model [ms m]
-  (let [ nsocs (jiggle-assocs ms m)
-         nm (assoc m :assocs nsocs)
-         nms (assoc ms (:id m) nm) ]
-    nms))
+(defn- resolve-assoc [ms m]
+  (let [ par (:parent m) ]
+    (if (nil? par)
+      (union #{} (resolve-local-assoc ms m))
+      (union #{} (resolve-local-assoc ms m) (resolve-assoc ms (get ms par))))))
 
-(defn- jiggle-models [ms]
-  (reduce (fn [sum en]
-            (let [ rc (jiggle-model sum (get sum (first en))) ]
-              rc))
-            ms (seq ms)))
+(defn- resolve-assocs [ms]
+  (let [ rc (atom #{} ) ]
+    (doseq [ en (seq ms) ]
+      (reset! rc (union @rc (resolve-assoc ms (last en)) )))
+    @rc))
+
+(defn- inject-fkeys-models [ms fks]
+  (let [ rc (atom (merge {} ms)) ]
+    (doseq [ k (seq fks) ]
+      (let [ ss (.split k "\\|") id (keyword (nth ss 0)) fid (keyword (nth ss 1))
+             pojo (get ms id) ]
+        (reset! rc (assoc @rc id (with-db-field pojo fid { :domain :long :assoc-key true } )))))
+    @rc))
 
 (defn- resolve-parent [ms m]
   (let [ par (:parent m) ]
@@ -180,15 +189,48 @@
 (defn- mapize-models [ms]
   (reduce (fn [sum n] (assoc sum (:id n) n)) {} (seq ms)))
 
+(defn- collect-db-xxx-filter [a b]
+  (cond
+    (keyword? b) :keyword
+    (map? b) :map
+    :else (throw (DBIOError. (str "Invalid arg " b)))))
+
+(defmulti collect-db-fields collect-db-xxx-filter)
+(defmethod collect-db-fields :keyword [cache modelid]
+  (collect-db-fields cache (get cache modelid)))
+(defmethod collect-db-fields :map [cache zm]
+  (let [ par (:parent zm) ]
+    (if (nil? par)
+      (merge {} (:fields zm))
+      (merge {} (:fields zm) (collect-db-fields cache par)))))
+
+(defmulti collect-db-indexes collect-db-xxx-filter)
+(defmethod collect-db-indexes :keyword [cache modelid]
+  (collect-db-indexes cache (get cache modelid)))
+(defmethod collect-db-indexes :map [cache zm]
+  (let [ par (:parent zm) ]
+    (if (nil? par)
+      (merge {} (:indexes zm))
+      (merge {} (:indexes zm) (collect-db-indexes cache par)))))
+
+(defmulti collect-db-uniques collect-db-xxx-filter)
+(defmethod collect-db-uniques :keyword [cache modelid]
+  (collect-db-uniques cache (get cache modelid)))
+(defmethod collect-db-uniques :map [cache zm]
+  (let [ par (:parent zm) ]
+    (if (nil? par)
+      (merge {} (:uniques zm))
+      (merge {} (:uniques zm) (collect-db-uniques cache par)))))
+
 (defn make-MetaCache ^{ :doc "" }
   [schema]
   (let [ ms (if (nil? schema) {} (mapize-models (.getModels schema)))
          m1 (if (empty? ms) {} (resolve-parents ms))
          m2 (assoc m1 BASEMODEL-MONIKER dbio-basemodel)
-        ;; m2 (if (empty? m1) {} (jiggle-models m1))
+         m3 (inject-fkeys-models m2 (resolve-assocs m2))
         ]
     (reify MetaCacheAPI
-      (getMetas [_] m2))))
+      (getMetas [_] m3))))
 
 
 
@@ -201,7 +243,11 @@
     :state {:null false}
     :zip {:null false}
     :country {:null false}
-                   }))
+                   })
+  (with-db-indexes { :i1 #{ :city :state :country }
+    :i2 #{ :zip :country }
+    :state #{ :state }
+    :zip #{ :zip } } ))
 
 (defmodel person
   (with-db-abstract)
@@ -215,43 +261,21 @@
     :addr { :kind :o2m :singly true :rhs :address }
     :spouse { :kind :o2o :rhs :person }
     :accts { :kind :o2m :rhs :bankacct }
-                   }))
+                   })
+  (with-db-indexes { :i1 #{ :age } })
+  (with-db-uniques { :u2 #{ :fname :lname } }))
 
 (defmodel president
   (with-db-parent-model :person))
 
 (defmodel bankacct
   (with-db-fields {
+    :acctid { :null false }
     :amount { :null false :domain :double }
-                   }))
+                   })
+  (with-db-uniques { :u2 #{ :acctid } }))
 
 
-(defmodel meta-info
-  (with-db-field :f0 { :column "F0" :domain :int })
-  (with-db-assoc :a0 { :rhs "meta-affa" :kind :o2m :fkey "fk_a0" })
-           )
-(defmodel base-info
-  (with-db-table-name "BASE_INFO")
-  (with-db-parent-model :meta-info)
-  (with-db-indexes { :i1 #{ :f1 :f2 } })
-  (with-db-uniques { :u1 #{ :f0 } })
-  (with-db-field :f1 { :column "F1" :domain :int })
-  (with-db-field :f2 { :column "F2" :domain :long })
-  (with-db-assoc :a1 { :rhs "affa" :kind :o2m :fkey "fk_a1" })
-  (with-db-assoc :a2 { :rhs "affa" :kind :o2m :fkey "fk_a2" })
-           )
-(defmodel tracking-info
-  (with-db-table-name "TRACKING_INFO")
-  (with-db-parent-model :base-info)
-  (with-db-indexes { :i4 #{ :f1 :f2 } })
-  (with-db-uniques { :u2 #{ :f0 } })
-  (with-db-field :f1 { :column "F1" :domain :double })
-  (with-db-field :f2 { :column "F3" :domain :bytes })
-  (with-db-assoc :a0 { :rhs "affa" :kind :o2m :fkey "fk_a0" })
-  (with-db-assoc :a2 { :rhs "poo" :kind :o2m :fkey "fk_a2" })
-           )
-
-;;(def testschema (Schema. [ base-info tracking-info ]))
 (def testschema (Schema. [ president address person bankacct ]))
 
 

@@ -17,7 +17,9 @@
   (getTestString [_] )
   (getId [_] ))
 
-(defn- getcolname [flds fid] (:column (get flds fid)))
+(defn- getcolname [flds fid] 
+  (let [ c (:column (get flds fid)) ]
+    (if (SU/hgl? c) (.toUpperCase c) c)))
 
 (defn- getNotNull [db] "NOT NULL")
 
@@ -140,8 +142,8 @@
   (genColDef db (:column fld) (getBoolKeyword db) (:null fld)
       (if (:default fld) (:default-value fld) nil)))
 
-(defn- genExIndexes [db table zm]
-  (let [ flds (:fields zm) m (:indexes zm) bf (StringBuilder.) ]
+(defn- genExIndexes [db cache table flds zm]
+  (let [ m (collect-db-indexes cache zm) bf (StringBuilder.) ]
     (doseq [ en (seq m) ]
       (let [ nm (first en) cols (map #(getcolname flds %) (last en)) ]
         (when (empty? cols) (throw (DBIOError. (str "Cannot have empty index: " nm))))
@@ -151,8 +153,8 @@
                     " ( " (clojure.string/join "," cols) " )" (genExec db) "\n\n" ))))
     (.toString bf)))
 
-(defn- genUniques [db zm]
-  (let [ flds (:fields zm) m (:uniques zm) bf (StringBuilder.) ]
+(defn- genUniques [db cache flds zm]
+  (let [ m (collect-db-uniques cache zm) bf (StringBuilder.) ]
     (doseq [ en (seq m) ]
       (let [ nm (first en) cols (map #(getcolname flds %) (last en)) ]
         (when (empty? cols) (throw (DBIOError. (str "Cannot have empty unique: " (name nm)))))
@@ -161,13 +163,16 @@
     (.toString bf)))
 
 (defn- genPrimaryKey [db zm pks]
-    (str (getPad db) "PRIMARY KEY(" (clojure.string/join "," pks) ")"))
+    (str (getPad db) "PRIMARY KEY(" 
+         (.toUpperCase (SU/nsb (clojure.string/join "," pks)) )
+         ")"))
 
-(defn- genBody [db table zm]
+(defn- genBody [db cache table zm]
   (let [ inx (StringBuilder.) bf (StringBuilder.) pkeys (atom #{})
-         iix (atom 1) ]
+         iix (atom 1)
+         flds (collect-db-fields cache zm) ]
     ;; 1st do the columns
-    (doseq [ en (seq (:fields zm)) ]
+    (doseq [ en (seq flds) ]
       (let [ fld (last en) cn (.toUpperCase (:column fld))
              dt (:domain fld)
              col (case dt
@@ -185,32 +190,22 @@
         (when (:pkey fld) (reset! pkeys (conj @pkeys cn)))
         (SU/add-delim! bf ",\n" col)))
     ;; now do the assocs
-    (doseq [ en (seq (:assocs zm)) ]
-      (let [ soc (last en) cn (.toUpperCase (:fkey soc))
-             pos @iix
-             col (genColDef db cn (getLongKeyword db) true nil) ]
-        (SU/add-delim! bf ",\n" col)
-        (.append inx (str "CREATE INDEX " 
-                          (.toLowerCase (str table "_x" pos))
-                          " ON " table
-                        " ( "  cn " )" (genExec db) "\n\n"))
-        (reset! iix (inc pos))))
     ;; now explicit indexes
-    (-> inx (.append (genExIndexes db table zm)))
+    (-> inx (.append (genExIndexes db cache table flds zm)))
     ;; now uniques, primary keys and done.
     (when (> (.length bf) 0)
       (when (> (.size @pkeys) 0)
         (.append bf (str ",\n" (genPrimaryKey db zm @pkeys))))
-      (let [ s (genUniques db zm) ]
+      (let [ s (genUniques db cache flds zm) ]
         (when (SU/hgl? s)
           (.append bf (str ",\n" s)))))
 
     [ (.toString bf) (.toString inx) ] ))
 
-(defn- genOneTable [db zm]
+(defn- genOneTable [db ms zm]
   (let [ table (.toUpperCase (:table zm))
            b (genBegin db table)
-           d (genBody db table zm)
+           d (genBody db ms table zm)
            e (genEnd db)
            s1 (str b (first d) e)
            inx (last d) ]
@@ -221,13 +216,12 @@
   (let [ ms (.getMetas metaCache)
          drops (StringBuilder.)
          body (StringBuilder.) ]
-    ;;(println ms)
     (doseq [ en (seq ms) ]
       (let [ tdef (last en) id (first en) tbl (:table tdef) ]
         (when (and (not (:abstract tdef)) (SU/hgl? tbl))
           (debug "model id: " (name id) " table: " tbl)
           (-> drops (.append (genDrop db (.toUpperCase tbl) )))
-          (-> body (.append (genOneTable db tdef))))))
+          (-> body (.append (genOneTable db ms tdef))))))
     (str "" drops body (genEndSQL db))))
 
 
