@@ -18,16 +18,25 @@
 (defmethod getDoubleKeyword H2 [db] "DOUBLE")
 (defmethod getBlobKeyword H2 [db] "BLOB")
 (defmethod getFloatKeyword H2 [db] "FLOAT")
+
 (defmethod genAutoInteger H2 [db table fld]
-  (str (getPad db) (:column fld) " " (getIntKeyword db)
+  (str (getPad db) (genCol fld) " " (getIntKeyword db)
             (if (:pkey fld) " IDENTITY(1) " " AUTO_INCREMENT(1) ")))
+
 (defmethod genAutoLong H2 [db table fld]
-  (str (getPad db) (:column fld) " " (getLongKeyword db)
+  (str (getPad db) (genCol fld) " " (getLongKeyword db)
             (if (:pkey fld) " IDENTITY(1) " " AUTO_INCREMENT(1) ")))
+
 (defmethod genBegin H2 [db table]
   (str "CREATE CACHED TABLE " table "\n(\n" ))
+
 (defmethod genDrop H2 [db table]
   (str "DROP TABLE " table " IF EXISTS CASCADE" (genExec db) "\n\n"))
 
+
+(println (getDDL (H2.) (make-MetaCache testschema)))
+
 (def ^:private h2-eof nil)
+
+
 

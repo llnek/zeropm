@@ -8,10 +8,12 @@
 (use '[comzotohcljc.dbio.dbutils])
 
 (import '(com.zotoh.frwk.dbio DBIOError))
-
+(import '(java.util HashMap))
 
 (def ^:dynamic *USE_DDL_SEP* true)
 (def ^:dynamic *DDL_SEP* "-- :")
+(def ^:dynamic *DDL_BVS* nil)
+
 
 (defprotocol DBDriver
   (getTestString [_] )
@@ -33,6 +35,9 @@
 (defn- genSep [db]
   (if *USE_DDL_SEP* *DDL_SEP* ""))
 
+(defn genCol [fld]
+  (.toUpperCase (:column fld)))
+
 (defmulti genExec (fn [a & more] (class a)))
 (defmethod genExec :default [db] (str ";\n" (genSep db)))
 
@@ -45,7 +50,7 @@
   (str "CREATE TABLE " table "\n(\n"))
 
 (defmulti genEnd (fn [a & more] (class a)))
-(defmethod genEnd :default [db] (str "\n)" (genExec db) "\n\n"))
+(defmethod genEnd :default [db table] (str "\n)" (genExec db) "\n\n"))
 
 (defmulti genGrant (fn [a & more] (class a)))
 (defmethod genGrant :default [db table] "")
@@ -206,23 +211,24 @@
   (let [ table (.toUpperCase (:table zm))
            b (genBegin db table)
            d (genBody db ms table zm)
-           e (genEnd db)
+           e (genEnd db table)
            s1 (str b (first d) e)
            inx (last d) ]
       (str s1 (if (SU/hgl? inx) inx "") (genGrant db table))))
 
 (defn getDDL  ^{ :doc "" }
   [db metaCache]
-  (let [ ms (.getMetas metaCache)
-         drops (StringBuilder.)
-         body (StringBuilder.) ]
-    (doseq [ en (seq ms) ]
-      (let [ tdef (last en) id (first en) tbl (:table tdef) ]
-        (when (and (not (:abstract tdef)) (SU/hgl? tbl))
-          (debug "model id: " (name id) " table: " tbl)
-          (-> drops (.append (genDrop db (.toUpperCase tbl) )))
-          (-> body (.append (genOneTable db ms tdef))))))
-    (str "" drops body (genEndSQL db))))
+  (binding [ *DDL_BVS* (HashMap.) ]
+    (let [ ms (.getMetas metaCache)
+           drops (StringBuilder.)
+           body (StringBuilder.) ]
+      (doseq [ en (seq ms) ]
+        (let [ tdef (last en) id (first en) tbl (:table tdef) ]
+          (when (and (not (:abstract tdef)) (SU/hgl? tbl))
+            (debug "model id: " (name id) " table: " tbl)
+            (-> drops (.append (genDrop db (.toUpperCase tbl) )))
+            (-> body (.append (genOneTable db ms tdef))))))
+      (str "" drops body (genEndSQL db)))) )
 
 
 (def ^:private dbdrivers-eof nil)

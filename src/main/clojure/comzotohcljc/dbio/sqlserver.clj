@@ -19,16 +19,19 @@
 (defmethod getFloatKeyword SQLServer [db] "FLOAT(53)")
 
 (defmethod genAutoInteger SQLServer [db table fld]
-  (str (getPad db) (:column fld) " " (getIntKeyword db)
+  (str (getPad db) (genCol fld) " " (getIntKeyword db)
     (if (:pkey fld) " IDENTITY (1,1) " " AUTOINCREMENT ")))
 
 (defmethod genAutoLong SQLServer [db table fld]
-  (str (getPad db) (:column fld) " " (getLongKeyword db)
+  (str (getPad db) (genCol fld) " " (getLongKeyword db)
     (if (:pkey fld) " IDENTITY (1,1) " " AUTOINCREMENT ")))
 
 (defmethod genDrop SQLServer [db table]
   (str "IF EXISTS (SELECT * FROM dbo.sysobjects WHERE id=object_id('"
        table "')) DROP TABLE " table (genExec db) "\n\n"))
+
+
+(println (getDDL (SQLServer.) (make-MetaCache testschema)))
 
 
 (def ^:private sqlserver-eof nil)

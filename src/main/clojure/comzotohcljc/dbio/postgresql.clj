@@ -18,13 +18,13 @@
 (defmethod getDoubleKeyword Postgresql [db] "DOUBLE PRECISION")
 (defmethod getFloatKeyword Postgresql [db] "REAL")
 
-(defmethod genCal Postgresql [db fld] (genTimestamp fld))
+(defmethod genCal Postgresql [db fld] (genTimestamp db fld))
 
 (defmethod genAutoInteger Postgresql [db table fld]
-  (genColDef db (:column fld) "SERIAL" false nil))
+  (genColDef db (genCol fld) "SERIAL" false nil))
 
 (defmethod genAutoLong Postgresql [db table fld]
-  (genColDef db (:column fld) "BIGSERIAL" false nil))
+  (genColDef db (genCol fld) "BIGSERIAL" false nil))
 
 (defmethod genDrop Postgresql [db table]
   (str "DROP TABLE IF EXISTS " table " CASCADE" (genExec db) "\n\n"))
