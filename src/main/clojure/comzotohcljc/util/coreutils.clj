@@ -61,6 +61,13 @@
 
 (defn is-nichts? [obj] (identical? obj *NICHTS*))
 
+(defn flatten-nil ^{ :doc "" }
+  [vs]
+  (cond
+    (nil? vs) nil
+    (empty? vs) []
+    :else (into [] (remove nil? vs))))
+
 (defn match-char? ^{ :doc "Returns true if this char exists inside this set of chars." }
   [ch setOfChars]
   (if (nil? setOfChars) false (contains? setOfChars ch)))
