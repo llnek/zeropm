@@ -7,14 +7,195 @@
 (require '[comzotohcljc.util.ioutils :as IO])
 (import '(java.util GregorianCalendar TimeZone))
 (import '(java.sql Types))
+(import '(java.math BigDecimal BigInteger))
+(import '(java.sql Date Timestamp Blob Clob))
+(import '(java.io Reader InputStream))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(def ^:dynamic *GMT-CAL*
-    (GregorianCalendar. (TimeZone/getTimeZone "GMT")) )
+(def ^:dynamic *GMT-CAL* (GregorianCalendar. (TimeZone/getTimeZone "GMT")) )
+(defrecord JDBCInfo [driver url user pwdObj] )
+
+(defn- doUpdate [obj cols]
+    val (all,none) = if (updates.size==0) (false,true) else (updates.head=="*",false)
+    if (none) { return 0 }
+    val obj= pojo.asInstanceOf[AbstractModel]
+    val ds= obj.getDirtyFields
+    val lst= mutable.ArrayBuffer[Any]()
+    val sb1= new StringBuilder(1024)
+    val cz= throwNoCZMeta(obj.getClass)
+    val flds= cz.getFldMetas
+    val cver= pojo.getVerID
+    val nver= cver+1
+    val lock= getDB().supportsOptimisticLock()
+    val cols= updates.map( _.toUpperCase )
+
+    obj.setLastModified(nowJTS )
+    ds.filter( all || cols.contains(_) ).foreach { (dn) =>
+      val go= flds.get(dn) match {
+        case Some(fld) =>
+          if ( ! fld.isUpdatable|| fld.isAutoGen ) false else true
+        case _ => true
+      }
+      if (go) {
+        addAndDelim(sb1, ",", dn)
+        obj.get(dn) match {
+          case Some(Nichts.NICHTS) | None => sb1.append("=NULL")
+          case Some(v) =>
+            sb1.append("=?")
+            lst += v
+        }
+      }
+    }
+
+    if (sb1.length > 0) {
+      addAndDelim(sb1, ",", obj.dbio_getLastModified_column.uc).append("=?")
+      lst += obj.getLastModified
+      if (lock) {
+        addAndDelim(sb1, ",", COL_VERID).append("=?")
+        lst += nver
+      }
+      // for where clause
+      lst += obj.getRowID
+      if (lock) { lst += cver }
+      val tbl= cz.getTable.uc
+      val cnt= execute("UPDATE " + tbl + " SET " + sb1 + " WHERE " +
+        fmtUpdateWhere(lock) , lst:_*)
+      if (lock) {
+        lockError(cnt, tbl, obj.getRowID )
+      }
+      cnt
+    } else {
+      0
+    }
+  }
+
+
+(deftype SimpleSQLr [db]
+  (execute [this]
+    (throw (UnsupportedOperationException. "no transactions.")) )
+  (update [this obj cols]
+    (let [ rc (doUpdate obj cols) ]
+      (reset this obj)
+          rc))
+  (delete [this obj]
+    (let [ rc (doDelete obj) ]
+      (reset this obj)
+      rc))
+  (insert [this obj]
+    (let [ rc (doInsert obj)  ]
+      (reset this obj)
+      rc))
+  (select [this sql pms]
+    (let [ c (.open db) ]
+      (try
+        (-> (SQuery. c sql pms) (.select))
+      (finally (.close db c)))))
+  (executeWithOutput [this sql pms]
+    (let [ c (.open db) ]
+      (try
+        (.setAutoCommit c true)
+        (doExecuteWithOutput c sql pms)
+      (finally (.close db c)))))
+  (execute [this sql pms]
+    (let [ c (.open db) ]
+      (try
+        (.setAutoCommit c true)
+        (doExecute c sql pms)
+      (finally (.close db c)))))
+  (count* [this model] (doCount model))
+  (count* [ this sql]
+    (let [ c (.open db) ]
+      (try
+        (let [ rc (-> (SQuery. c sql) (.select)) ]
+          (if (empty? rc) 0 (first rc)))
+      (finally (.close db c)))))
+  (purge [this model] (doPurge model))
+  (reset [this obj]
+    ;;obj.asInstanceOf[AbstractModel].commit()
+  )
+)
+
+(deftype Transaction [conn db pojos]
+  (insert [this obj]
+    (let [ rc (doInsert obj) ]
+      (rego this obj)
+      rc))
+
+  (select [this sql pms]
+    (> (SQuery. conn sql pms) (.select)))
+
+  (executeWithOutput [this sql pms]
+    (doExecuteWithOutput conn sql pms))
+
+  (execute [this sql pms]
+    (doExecute conn sql pms))
+
+  (delete [this obj]
+    (let [ rc  (doDelete obj) ]
+      (rego this obj)
+      rc))
+
+  (update [this obj cols]
+    (let [ rc (doUpdate obj cols) ]
+      (rego this obj)
+      rc))
+
+  (count* [this sql]
+    (let [ rc  (-> (SQuery. conn sql) (.select)) ]
+      (if (empty? rc) 0 (first rc))))
+
+  (purge [this sql]
+    (execute this sql))
+
+  (rego [this obj] (reset! pojo (conj @pojos obj)))
+
+  (reset [this]
+    ;;_items.foreach(_.asInstanceOf[AbstractModel].commit() )
+    ;;_items.clear
+    nil
+  )
+
+)
+
+(deftype CompositeSQLr [db]
+
+  (execWith [this func]
+    (let [ c (begin this) tx (Transaction. c db) rc (atom nil) ]
+      (try
+        (reset! rc (apply func tx))
+        (commit this c)
+        (.reset tx)
+        @rc
+        (catch Throwable e#
+          (do (rollback this c) (warn e#) (throw e#)))
+        (finally (close this c)))))
+
+  (rollback [this c] (CU/TryC (.rollback c)))
+  (commit [this c] (.commit c))
+  (begin [this]
+    (doto (.open db)
+      (.setAutoCommit false)))
+  (close [this c] (CU/TryC (.close c)))
+
+  )
+
+
+
+(deftype SimpleDB [jdbc options] DBAPI
+  (supportsOptimisticLock [_]
+    (if (contains? options :opt-lock) (:opt-lock options) true))
+  (vendor [_]  (DU/vendor jdbc))
+  (finz [_] nil)
+  (open [_] (-> x (.getPool)(.nextFree)))
+  (newCompositeSQLProc [this] (CompositeSQLr. this))
+  (newSimpleSQLProc [this] (SimpleSQLr. this))
+)
+
+
 
 
 (defn- uc-ent [ent] (.toUpperCase (name ent)))
@@ -60,10 +241,13 @@
     (assoc @row (.toUpperCase cn) cv)))
 
 
-(defn- row-built! [row]
-
-
-  )
+(defn- row-built! [pojo row]
+  (let [ rc (atom {}) ]
+    (doseq [ [k v] (seq pojo) ]
+      (let [ cn (.toUpperCase (:column v)) ]
+        (when (contains? row cn)
+          (reset! rc (assoc @rc k (get row cn))))))
+    @rc))
 
 (defn- row2obj [rs rsmeta]
   (let [ cc (.getColumnCount rsmeta)
