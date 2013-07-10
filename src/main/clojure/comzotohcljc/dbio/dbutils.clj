@@ -121,7 +121,7 @@
             :auto true :system true :updatable false}
     :verid {:column "dbio_version" :domain :long :system true
             :default true :default-value 0}
-    :last-mod {:column "dbio_lastchanged" :domain :timestamp
+    :last-modify {:column "dbio_lastchanged" :domain :timestamp
                :system true :default true}
     :created-on {:column "dbio_created_on" :domain :timestamp
                   :system true :default true :updatable false}

@@ -19,169 +19,134 @@
 (def ^:dynamic *GMT-CAL* (GregorianCalendar. (TimeZone/getTimeZone "GMT")) )
 (defrecord JDBCInfo [driver url user pwdObj] )
 
-(defn- doUpdate [obj cols]
-    val (all,none) = if (updates.size==0) (false,true) else (updates.head=="*",false)
-    if (none) { return 0 }
-    val obj= pojo.asInstanceOf[AbstractModel]
-    val ds= obj.getDirtyFields
-    val lst= mutable.ArrayBuffer[Any]()
-    val sb1= new StringBuilder(1024)
-    val cz= throwNoCZMeta(obj.getClass)
-    val flds= cz.getFldMetas
-    val cver= pojo.getVerID
-    val nver= cver+1
-    val lock= getDB().supportsOptimisticLock()
-    val cols= updates.map( _.toUpperCase )
+(defn- uc-ent [ent] (.toUpperCase (name ent)))
 
-    obj.setLastModified(nowJTS )
-    ds.filter( all || cols.contains(_) ).foreach { (dn) =>
-      val go= flds.get(dn) match {
-        case Some(fld) =>
-          if ( ! fld.isUpdatable|| fld.isAutoGen ) false else true
-        case _ => true
-      }
-      if (go) {
-        addAndDelim(sb1, ",", dn)
-        obj.get(dn) match {
-          case Some(Nichts.NICHTS) | None => sb1.append("=NULL")
-          case Some(v) =>
-            sb1.append("=?")
-            lst += v
-        }
-      }
-    }
+(defn ese
+  ([ent] (uc-ent ent))
+  ([ch ent] (str ch (uc-ent ent) ch))
+  ([c1 ent c2] (str c1 (uc-ent ent) c2)))
 
-    if (sb1.length > 0) {
-      addAndDelim(sb1, ",", obj.dbio_getLastModified_column.uc).append("=?")
-      lst += obj.getLastModified
-      if (lock) {
-        addAndDelim(sb1, ",", COL_VERID).append("=?")
-        lst += nver
-      }
-      // for where clause
-      lst += obj.getRowID
-      if (lock) { lst += cver }
-      val tbl= cz.getTable.uc
-      val cnt= execute("UPDATE " + tbl + " SET " + sb1 + " WHERE " +
-        fmtUpdateWhere(lock) , lst:_*)
-      if (lock) {
-        lockError(cnt, tbl, obj.getRowID )
-      }
-      cnt
-    } else {
-      0
-    }
-  }
+(defn table-name
+  ([mdef] (:table mdef))
+  ([mid cache] (table-name (get cache mid))))
 
+(defn col-name
+  ([fdef] (:column fdef))
+  ([fid zm] (col-name (get zm fid))))
 
-(deftype SimpleSQLr [db]
-  (execute [this]
-    (throw (UnsupportedOperationException. "no transactions.")) )
-  (update [this obj cols]
-    (let [ rc (doUpdate obj cols) ]
-      (reset this obj)
-          rc))
-  (delete [this obj]
-    (let [ rc (doDelete obj) ]
-      (reset this obj)
-      rc))
-  (insert [this obj]
-    (let [ rc (doInsert obj)  ]
-      (reset this obj)
-      rc))
-  (select [this sql pms]
-    (let [ c (.open db) ]
-      (try
-        (-> (SQuery. c sql pms) (.select))
-      (finally (.close db c)))))
-  (executeWithOutput [this sql pms]
-    (let [ c (.open db) ]
-      (try
-        (.setAutoCommit c true)
-        (doExecuteWithOutput c sql pms)
-      (finally (.close db c)))))
-  (execute [this sql pms]
-    (let [ c (.open db) ]
-      (try
-        (.setAutoCommit c true)
-        (doExecute c sql pms)
-      (finally (.close db c)))))
-  (count* [this model] (doCount model))
-  (count* [ this sql]
-    (let [ c (.open db) ]
-      (try
-        (let [ rc (-> (SQuery. c sql) (.select)) ]
-          (if (empty? rc) 0 (first rc)))
-      (finally (.close db c)))))
-  (purge [this model] (doPurge model))
-  (reset [this obj]
-    ;;obj.asInstanceOf[AbstractModel].commit()
-  )
-)
+(defn- fmtUpdateWhere [lock zm]
+  (let [ s1 (str (ese (col-name :rowid zm)) "=?") ]
+    (if lock
+      (str s1 " AND " (ese (col-name :verid zm)) "=?")
+      s1)))
 
-(deftype Transaction [conn db pojos]
-  (insert [this obj]
-    (let [ rc (doInsert obj) ]
-      (rego this obj)
-      rc))
+(defn- lockError [opcode cnt table rowID]
+  (when (= cnt 0)
+    (throw (OptLockError. opcode table rowID))))
 
-  (select [this sql pms]
-    (> (SQuery. conn sql pms) (.select)))
+(deftype SQLProc [_db _metaCache _implr]
 
-  (executeWithOutput [this sql pms]
-    (doExecuteWithOutput conn sql pms))
+  (count* [_ model]
+    (.doCount implr (str "SELECT COUNT(*) FROM " (ese (:table model)))) )
 
-  (execute [this sql pms]
-    (doExecute conn sql pms))
+  (purge [_ model]
+    (.doPurge implr (str "DELETE FROM " (ese (:table model)))))
 
-  (delete [this obj]
-    (let [ rc  (doDelete obj) ]
-      (rego this obj)
-      rc))
+  (doDelete [this obj]
+    (let [ info (meta obj) model (:typeid info) zm (get _metaCache model)
+           lock (.supportsOptimisticLock _db)
+           table (table-name zm)
+           rowid (:rowid info)
+           verid (:verid info)
+           p (if lock [rowid verid] [rowid] )
+           w (fmtUpdateWhere lock zm)
+           cnt (doExecute this (str "DELETE FROM " table " WHERE " w p)) ]
+      (when lock (lockError cnt tbl rowid))
+      cnt))
 
-  (update [this obj cols]
-    (let [ rc (doUpdate obj cols) ]
-      (rego this obj)
-      rc))
+  (doInsert [this obj]
+    (let [ info (meta obj) model (:typeid info) zm (get _metaCache model)
+           lock (.supportsOptimisticLock _db)
+           table (table-name zm)
+           flds (:fields zm)
+           pms (atom [])
+           now (CU/now-jtstamp)
+           s2 (StringBuilder.) s1 (StringBuilder.) ]
+      (doseq [ [k v] (seq obj) ]
+        (let [ fdef (get flds k) cn (:column fdef) ]
+          (when (and (not (nil? fdef))
+                     (not (:auto fdef))
+                     (not (:system fdef)))
+            (SU/add-delim! s1 "," (ese cn))
+            (when (> (.length s2) 0) (.append s2 ","))
+            (if (nil? v)
+              (.append s2 "NULL")
+              (do
+                (.append s2 "?")
+                (reset! pms (conj @pms v)))))))
 
-  (count* [this sql]
-    (let [ rc  (-> (SQuery. conn sql) (.select)) ]
-      (if (empty? rc) 0 (first rc))))
+      (if (= (.length s1) 0)
+        nil
+        (let [ [rc out] (doExecuteWithOutput this
+                  (str "INSERT INTO " (ese table) "(" s1 ") VALUES (" s2 ")" ) @pms) ]
+          (when (empty? out)
+            (throw (SQLException. (str "Insert requires row-id to be returned."))))
+          (let [ rowid (first out) verid 0  wm { :rowid rowid :verid verid } ]
+            (when-not (instance? Long rowid)
+              (throw (SQLException. (str "RowID data-type must be Long."))))
+            (vary-meta obj (fn [m1 m2] (merge m1 m2)) wm))))
+      ))
 
-  (purge [this sql]
-    (execute this sql))
+  (doUpdate [this obj]
+    (let [ info (meta obj) model (:typeid info) zm (get _metaCache model)
+           flds (if (nil? zm) {} (:fields zm))
+           table (table-name zm)
+           rowid (:rowid info)
+           sb1 (StringBuilder.)
+           cver (CU/nnz (:verid info))
+           nver (inc cver)
+           pms (atom [])
+           now (CU/now-jtstamp)
+           lock (.supportsOptimisticLock _db) ]
 
-  (rego [this obj] (reset! pojo (conj @pojos obj)))
+      (doseq [ [k v] (seq obj) ]
+        (let [ fdef (get flds k) cn (col-name fdef) ]
+          (when (and (not (nil? fdef))
+                     (:updatable fdef)
+                     (not (:auto fdef)) (not (:system fdef)) )
+            (SU/add-delim! sb1 "," (ese cn))
+            (if (nil? v)
+              (.append sb1 "=NULL")
+              (do
+                (.append sb1 "=?")
+                (reset! pms (conj @pms v)))))))
 
-  (reset [this]
-    ;;_items.foreach(_.asInstanceOf[AbstractModel].commit() )
-    ;;_items.clear
-    nil
-  )
+      (if (= (.length sb1) 0)
+        nil
+        (do
+          (SU/add-delim! sb1 "," (ese (col-name :last-modify zm)))
+          (.append db1 "=?")
+          (reset! pms (conj @pms now))
+          ;; update to new version (+1)
+          (when lock
+            (SU/add-delim! sb1 "," (ese (col-name :verid zm)))
+            (.append db1 "=?")
+            (reset! pms (conj @pms nver)))
+          ;; for the where clause
+          (reset! pms (conj @pms rowid))
+          (when lock
+            (reset! pms (conj @pms cver)))
+          (let [ cnt (doExecute this (str "UPDATE " tbl " SET " sb1 " WHERE "
+                                  (fmtUpdateWhere lock zm) ) pms) ]
+            (when lock (lockError cnt tbl rowid))
+            (vary-meta obj (fn [m1 m2] (merge m1 m2))
+               { :verid nver :last-modify now })
+            )))
+      ))
+
 
 )
 
-(deftype CompositeSQLr [db]
-
-  (execWith [this func]
-    (let [ c (begin this) tx (Transaction. c db) rc (atom nil) ]
-      (try
-        (reset! rc (apply func tx))
-        (commit this c)
-        (.reset tx)
-        @rc
-        (catch Throwable e#
-          (do (rollback this c) (warn e#) (throw e#)))
-        (finally (close this c)))))
-
-  (rollback [this c] (CU/TryC (.rollback c)))
-  (commit [this c] (.commit c))
-  (begin [this]
-    (doto (.open db)
-      (.setAutoCommit false)))
-  (close [this c] (CU/TryC (.close c)))
-
-  )
 
 
 
@@ -195,14 +160,6 @@
   (newSimpleSQLProc [this] (SimpleSQLr. this))
 )
 
-
-
-
-(defn- uc-ent [ent] (.toUpperCase (name ent)))
-(defn- ese
-  ([ent] (uc-ent ent))
-  ([ch ent] (str ch (uc-ent ent) ch))
-  ([c1 ent c2] (str c1 (uc-ent ent) c2)))
 
 (defprotocol SQueryAPI
   )
