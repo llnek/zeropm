@@ -10,6 +10,7 @@
 (import '(java.math BigDecimal BigInteger))
 (import '(java.sql Date Timestamp Blob Clob))
 (import '(java.io Reader InputStream))
+(import '(com.zotoh.frwk.dbio DBIOError OptLockError))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -34,6 +35,7 @@
   ([fdef] (:column fdef))
   ([fid zm] (col-name (get zm fid))))
 
+(defn- merge-meta [m1 m2] (merge m1 m2))
 (defn- fmtUpdateWhere [lock zm]
   (let [ s1 (str (ese (col-name :rowid zm)) "=?") ]
     (if lock
@@ -44,106 +46,118 @@
   (when (= cnt 0)
     (throw (OptLockError. opcode table rowID))))
 
-(deftype SQLProc [_db _metaCache _implr]
 
-  (count* [_ model]
-    (.doCount implr (str "SELECT COUNT(*) FROM " (ese (:table model)))) )
+(defprotocol SQLProcAPI
+  (doCount [_  conn model] )
+  (doPurge [_  conn model] )
+  (doDelete [_  conn pojo] )
+  (doInsert [_  conn pojo] )
+  (doUpdate [_  conn pojo] )
+)
 
-  (purge [_ model]
-    (.doPurge implr (str "DELETE FROM " (ese (:table model)))))
+(deftype SQLProc [_db _metaCache _implr] SQLProcAPI
 
-  (doDelete [this obj]
-    (let [ info (meta obj) model (:typeid info) zm (get _metaCache model)
-           lock (.supportsOptimisticLock _db)
-           table (table-name zm)
-           rowid (:rowid info)
-           verid (:verid info)
-           p (if lock [rowid verid] [rowid] )
-           w (fmtUpdateWhere lock zm)
-           cnt (doExecute this (str "DELETE FROM " table " WHERE " w p)) ]
-      (when lock (lockError cnt tbl rowid))
-      cnt))
+  (doCount [_   conn model]
+    (let [ sql (str "SELECT COUNT(*) FROM " (ese (table-name model _metaCache)))
+           rc (-> (SQuery. conn sql) (.select)) ]
+      (if (empty? rc) 0 (first rc))))
 
-  (doInsert [this obj]
-    (let [ info (meta obj) model (:typeid info) zm (get _metaCache model)
-           lock (.supportsOptimisticLock _db)
-           table (table-name zm)
-           flds (:fields zm)
-           pms (atom [])
-           now (CU/now-jtstamp)
-           s2 (StringBuilder.) s1 (StringBuilder.) ]
-      (doseq [ [k v] (seq obj) ]
-        (let [ fdef (get flds k) cn (:column fdef) ]
-          (when (and (not (nil? fdef))
-                     (not (:auto fdef))
-                     (not (:system fdef)))
-            (SU/add-delim! s1 "," (ese cn))
-            (when (> (.length s2) 0) (.append s2 ","))
-            (if (nil? v)
-              (.append s2 "NULL")
-              (do
-                (.append s2 "?")
-                (reset! pms (conj @pms v)))))))
+  (doPurge [_   conn model]
+    (let [ sql (str "DELETE FROM " (ese (table-name model _metaCache))) ]
+      (do (-> (SQuery. conn sql) (.execute)) nil)))
 
-      (if (= (.length s1) 0)
-        nil
-        (let [ [rc out] (doExecuteWithOutput this
-                  (str "INSERT INTO " (ese table) "(" s1 ") VALUES (" s2 ")" ) @pms) ]
-          (when (empty? out)
-            (throw (SQLException. (str "Insert requires row-id to be returned."))))
-          (let [ rowid (first out) verid 0  wm { :rowid rowid :verid verid } ]
-            (when-not (instance? Long rowid)
-              (throw (SQLException. (str "RowID data-type must be Long."))))
-            (vary-meta obj (fn [m1 m2] (merge m1 m2)) wm))))
-      ))
+  (doDelete [this conn obj]
+    (let [ info (meta obj) model (:typeid info) zm (get _metaCache model) ]
+      (when (nil? zm) (throw (DBIOError. (str "Unknown model " model))))
+      (let [ lock (.supportsOptimisticLock _db)
+             table (table-name zm)
+             rowid (:rowid info)
+             verid (:verid info)
+             p (if lock [rowid verid] [rowid] )
+             w (fmtUpdateWhere lock zm)
+             cnt (doExecute this conn (str "DELETE FROM " (ese table) " WHERE " w) p) ]
+        (when lock (lockError "delete" cnt table rowid))
+        cnt)))
 
-  (doUpdate [this obj]
-    (let [ info (meta obj) model (:typeid info) zm (get _metaCache model)
-           flds (if (nil? zm) {} (:fields zm))
-           table (table-name zm)
-           rowid (:rowid info)
-           sb1 (StringBuilder.)
-           cver (CU/nnz (:verid info))
-           nver (inc cver)
-           pms (atom [])
-           now (CU/now-jtstamp)
-           lock (.supportsOptimisticLock _db) ]
+  (doInsert [this conn obj]
+    (let [ info (meta obj) model (:typeid info) zm (get _metaCache model) ]
+      (when (nil? zm) (throw (DBIOError. (str "Unknown model " model))))
+      (let [ lock (.supportsOptimisticLock _db)
+             table (table-name zm)
+             flds (:fields zm)
+             pms (atom [])
+             now (CU/now-jtstamp)
+             s2 (StringBuilder.) s1 (StringBuilder.) ]
+        (doseq [ [k v] (seq obj) ]
+          (let [ fdef (get flds k) cn (:column fdef) ]
+            (when (and (not (nil? fdef))
+                       (not (:auto fdef))
+                       (not (:system fdef)))
+              (SU/add-delim! s1 "," (ese cn))
+              (SU/add-delim! s2 "," (if (nil? v) "NULL" "?"))
+              (when-not (nil? v)
+                (reset! pms (conj @pms v))))))
 
-      (doseq [ [k v] (seq obj) ]
-        (let [ fdef (get flds k) cn (col-name fdef) ]
-          (when (and (not (nil? fdef))
-                     (:updatable fdef)
-                     (not (:auto fdef)) (not (:system fdef)) )
-            (SU/add-delim! sb1 "," (ese cn))
-            (if (nil? v)
-              (.append sb1 "=NULL")
-              (do
-                (.append sb1 "=?")
-                (reset! pms (conj @pms v)))))))
+        (if (= (.length s1) 0)
+          nil
+          (let [ [rc out] (doExecuteWithOutput this conn
+                    (str "INSERT INTO " (ese table) "(" s1 ") VALUES (" s2 ")" ) @pms) ]
+            (when (empty? out)
+              (throw (DBIOError. (str "Insert requires row-id to be returned."))))
+            (let [ wm { :rowid (first out) :verid 0 } ]
+              (when-not (instance? Long (:rowid wm) )
+                (throw (DBIOError. (str "RowID data-type must be Long."))))
+              (vary-meta obj merge-meta wm))))
+      )))
 
-      (if (= (.length sb1) 0)
-        nil
-        (do
-          (SU/add-delim! sb1 "," (ese (col-name :last-modify zm)))
-          (.append db1 "=?")
-          (reset! pms (conj @pms now))
-          ;; update to new version (+1)
-          (when lock
-            (SU/add-delim! sb1 "," (ese (col-name :verid zm)))
-            (.append db1 "=?")
-            (reset! pms (conj @pms nver)))
-          ;; for the where clause
-          (reset! pms (conj @pms rowid))
-          (when lock
-            (reset! pms (conj @pms cver)))
-          (let [ cnt (doExecute this (str "UPDATE " tbl " SET " sb1 " WHERE "
-                                  (fmtUpdateWhere lock zm) ) pms) ]
-            (when lock (lockError cnt tbl rowid))
-            (vary-meta obj (fn [m1 m2] (merge m1 m2))
-               { :verid nver :last-modify now })
-            )))
-      ))
+  (doUpdate [this conn obj]
+    (let [ info (meta obj) model (:typeid info) zm (get _metaCache model) ]
+      (when (nil? zm) (throw (DBIOError. (str "Unknown model " model))))
+      (let [ lock (.supportsOptimisticLock _db)
+             cver (CU/nnz (:verid info))
+             table (table-name zm)
+             rowid (:rowid info)
+             flds (:fields zm)
+             sb1 (StringBuilder.)
+             nver (inc cver)
+             pms (atom [])
+             now (CU/now-jtstamp) ]
+        (doseq [ [k v] (seq obj) ]
+          (let [ fdef (get flds k) cn (col-name fdef) ]
+            (when (and (not (nil? fdef))
+                       (:updatable fdef)
+                       (not (:auto fdef)) (not (:system fdef)) )
+              (doto sb1
+                (SU/add-delim! "," (ese cn))
+                (.append (if (nil? v) "=NULL" "=?")))
+              (when-not (nil? v)
+                (reset! pms (conj @pms v))))))
+        (if (= (.length sb1) 0)
+          nil
+          (do
+            (-> (SU/add-delim! sb1 "," (ese (col-name :last-modify zm)))
+                (.append "=?"))
+            (reset! pms (conj @pms now))
+            (when lock ;; up the version
+              (-> (SU/add-delim! sb1 "," (ese (col-name :verid zm)))
+                  (.append "=?"))
+              (reset! pms (conj @pms nver)))
+            ;; for the where clause
+            (reset! pms (conj @pms rowid))
+            (when lock (reset! pms (conj @pms cver)))
+            (let [ cnt (doExecute this conn (str "UPDATE " (ese table) " SET " sb1 " WHERE "
+                                            (fmtUpdateWhere lock zm)) @pms) ]
+              (when lock (lockError "update" cnt tbl rowid))
+              (vary-meta obj merge-meta { :verid nver :last-modify now })
+              )))
+      )))
 
+  (doExecuteWithOutput [this conn sql pms]
+    (let [ s (SQuery. conn sql pms) ]
+      [ (.execute s) (.getOutput s) ] ))
+
+  (doExecute [this conn sql pms]
+    (-> (SQuery. conn sql pms) (.execute)))
 
 )
 
@@ -251,18 +265,60 @@
 
     :else (throw (SQLException. (str "Unsupported param type: " (type p))))))
 
-(defn- build-stmt [conn sql params]
-  (let [ ps (if (insert? sql)
-              (.prepareStatement c sql Statement/RETURN_GENERATED_KEYS)
-              (.prepareStatement c sql)) ]
+(defn- mssql-tweak-sqlstr [sql token cmd]
+  (let [ lcs (.toLowerCase sql) pos (.indexOf lcs (name token))
+         [head tail] (if (< pos 0)
+                       [sql ""]
+                       [(.substring sql 0 pos) (.substring sql pos)]) ]
+    (if (SU/hgl? sql)
+      (str head " WITH (" cmd ") " tail)
+      sql)))
+
+(defn- jiggleSQL [db sqlstr]
+  (let [ v (.getVendor db)  sql (SU/trim sqlstr) lcs (.toLowerCase sql) ]
+    (when (= v *SQL-SERVER*)
+      (cond
+        (.startsWith lcs "select") (mssql-tweak-sqlstr sql :where "NOLOCK")
+        (.startsWith lcs "delete") (mssql-tweak-sqlstr sql :where "ROWLOCK")
+        (.startsWith lcs "update") (mssql-tweak-sqlstr sql :set "ROWLOCK")
+        :else sql))))
+
+(defn- build-stmt [db conn sqlstr params]
+  (let [ sql (jiggleSQL db sqlstr)
+         ps (if (insert? sql)
+              (.prepareStatement conn sql Statement/RETURN_GENERATED_KEYS)
+              (.prepareStatement conn sql)) ]
     (debug "SQL: {}" sql)
     (doseq [n (seq (range 0 (.size params))) ]
       (setBindVar ps (inc n) (nth params n)))))
 
-(deftype SQuery [db metaCache] SQueryAPI
+(defn- handleGKeys [rs cnt options]
+  (let [ rc (cond
+                (= cnt 1) (.getObject rs 1)
+                :else (.getLong rs (:pkey options))) ]
+    { :1 rc }))
 
-  (select [sql pms]
-    (with-open [ stmt (build-stmt sql pms) ]
+(defprotocol SQueryAPI
+  (executeWithOutput [_  sql pms options] )
+  (select [_ sql pms] )
+  (execute [_  sql pms] ) )
+
+(deftype SQuery [_db _metaCache _conn] SQueryAPI
+
+  (executeWithOutput [this sql pms options]
+    (with-open [ stmt (build-stmt _db _conn sql pms) ]
+      (with-open [ rc (.executeUpdate stmt) ]
+          (with-open [ rs (.getGeneratedKeys stmt) ]
+            (let [ cnt (if (nil? rs)
+                            0
+                            (-> (.getMetaData rs) (.getColumnCount))) ]
+              (if (and (> cnt 0) (.next rs))
+                (handleGKeys rs cnt options)
+                {}
+                ))))))
+
+  (select [this sql pms]
+    (with-open [ stmt (build-stmt _db _conn sql pms) ]
       (with-open [ rs (.executeQuery stmt) ]
         (let [ rsmeta (.getMetaData rs) ]
           (loop [ sum [] ok (.next rs) ]
@@ -270,22 +326,11 @@
               sum
               (recur (conj sum (row2obj rs rsmeta)) (.next rs))))))))
 
-  (findAll [model ordering] (findSome model {} ordering))
+  (execute [this sql pms]
+    (with-open [ stmt (build-stmt _db _conn sql pms) ]
+      (.executeUpdate stmt)))
 
-  (findOne [model filters]
-    (let [ rset (findSome model filters ordering) ]
-      (if (empty? rset) nil (first rset))))
-
-  (findSome [model filters ordering]
-    (let [ zm (get metaCache model)
-           tbl (ese (:table zm))
-           s (str "SELECT * FROM " tbl)
-           [wc pms] (to-filter-clause filters)
-           extra (if (SU/hgl? ordering) (str " ORDER BY " ordering) "") ]
-      (if (SU/hgl? wc)
-        (select (str s " WHERE " wc extra) pms)
-        (select (str s extra) []))))
-  )
+)
 
 
 

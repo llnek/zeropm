@@ -22,25 +22,41 @@
 
 (deftype SimpleSQLr [_db _metaCache _proc] SQLr
 
+  (findAll [model ordering] (findSome model {} ordering))
+
+  (findOne [model filters]
+    (let [ rset (findSome model filters ordering) ]
+      (if (empty? rset) nil (first rset))))
+
+  (findSome [model filters ordering]
+    (let [ zm (get metaCache model)
+           tbl (ese (:table zm))
+           s (str "SELECT * FROM " tbl)
+           [wc pms] (to-filter-clause filters)
+           extra (if (SU/hgl? ordering) (str " ORDER BY " ordering) "") ]
+      (if (SU/hgl? wc)
+        (select (str s " WHERE " wc extra) pms)
+        (select (str s extra) []))))
+
   (update [this obj] 
     (let [ conn (.open _db) ]
       (try
         (.setAutoCommit conn true)
-        (.doUpdate conn _proc)
+        (.doUpdate conn _proc obj)
         (finally (.close _db conn)))))
 
   (delete [this obj]
     (let [ conn (.open _db) ]
       (try
         (.setAutoCommit conn true)
-        (.doDelete conn _proc)
+        (.doDelete conn _proc obj)
         (finally (.close _db conn)))))
 
   (insert [this obj]
     (let [ conn (.open _db) ]
       (try
         (.setAutoCommit conn true)
-        (.doInsert conn _proc)
+        (.doInsert conn _proc obj)
         (finally (.close _db conn)))))
 
   (select [this sql params]
