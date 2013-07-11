@@ -31,7 +31,7 @@
        table "')) DROP TABLE " table (genExec db) "\n\n"))
 
 
-(println (getDDL (SQLServer.) (make-MetaCache testschema)))
+;;(println (getDDL (SQLServer.) (make-MetaCache testschema)))
 
 
 (def ^:private sqlserver-eof nil)

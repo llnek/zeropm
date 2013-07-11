@@ -57,7 +57,7 @@
   (str "DROP TABLE " table " CASCADE CONSTRAINTS PURGE" (genExec db) "\n\n"))
 
 
-(println (getDDL (Oracle.) (make-MetaCache testschema)))
+;;(println (getDDL (Oracle.) (make-MetaCache testschema)))
 
 (def ^:private oracle-eof nil)
 

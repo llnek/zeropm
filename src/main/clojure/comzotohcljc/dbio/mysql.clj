@@ -31,7 +31,7 @@
   (str "DROP TABLE IF EXISTS " table (genExec db) "\n\n"))
 
 
-(println (getDDL (MySQL.) (make-MetaCache testschema)))
+;;(println (getDDL (MySQL.) (make-MetaCache testschema)))
 
 (def ^:private mysql-eof nil)
 

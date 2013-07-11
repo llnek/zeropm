@@ -33,6 +33,8 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn get-vendor [jdbc] nil)
+
 (defn make-model [nm]
   {
     :parent nil
@@ -79,7 +81,7 @@
                :updatable true
                :system false
                :index "" }
-         fd (merge dft fdef)
+         fd (assoc (merge dft fdef) :id fid)
          fm (:fields pojo)
          nm (assoc fm fid fd) ]
     (assoc pojo :fields nm)))
@@ -222,16 +224,30 @@
       (merge {} (:uniques zm))
       (merge {} (:uniques zm) (collect-db-uniques cache par)))))
 
+(defn- colmap-fields [flds]
+  (let [ sum (atom {}) ]
+    (doseq [ [k v] (seq flds) ]
+      (let [ cn (:column v) ]
+        (reset! sum (assoc @sum cn v))))
+    @sum))
+
+(defn- meta-models [cache]
+  (let [ sum (atom {}) ]
+    (doseq [ [k m] (seq cache) ]
+      (let [ flds (collect-db-fields cache m)
+             cols (colmap-fields flds) ]
+        (reset! sum (assoc @sum k (with-meta m { :columns cols :fields flds } ) ))))
+    @sum))
+
 (defn make-MetaCache ^{ :doc "" }
   [schema]
   (let [ ms (if (nil? schema) {} (mapize-models (.getModels schema)))
          m1 (if (empty? ms) {} (resolve-parents ms))
          m2 (assoc m1 BASEMODEL-MONIKER dbio-basemodel)
          m3 (inject-fkeys-models m2 (resolve-assocs m2))
-        ]
+         m4 (meta-models m3) ]
     (reify MetaCacheAPI
-      (getMetas [_] m3))))
-
+      (getMetas [_] m4))))
 
 
 
