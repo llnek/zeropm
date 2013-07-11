@@ -2,6 +2,8 @@
        :author "kenl" }
   comzotohcljc.dbio.simple )
 
+(use '[clojure.tools.logging :only (info warn error debug)])
+
 (require '[comzotohcljc.util.coreutils :as CU])
 (require '[comzotohcljc.util.strutils :as SU])
 (require '[comzotohcljc.util.ioutils :as IO])
@@ -22,47 +24,53 @@
 
 (deftype SimpleSQLr [_db _metaCache _proc] SQLr
 
-  (findAll [model ordering] (findSome model {} ordering))
+  (findAll [this model ordering] (findSome this model {} ordering))
+  (findAll [this model] (findAll this model ""))
 
-  (findOne [model filters]
-    (let [ rset (findSome model filters ordering) ]
+  (findOne [this model filters]
+    (let [ rset (findSome this model filters "") ]
       (if (empty? rset) nil (first rset))))
 
-  (findSome [model filters ordering]
-    (let [ zm (get metaCache model)
-           tbl (ese (:table zm))
-           s (str "SELECT * FROM " tbl)
-           [wc pms] (to-filter-clause filters)
-           extra (if (SU/hgl? ordering) (str " ORDER BY " ordering) "") ]
-      (if (SU/hgl? wc)
-        (select (str s " WHERE " wc extra) pms)
-        (select (str s extra) []))))
+  (findSome [this  model filters] (findSome this model filters ""))
+  (findSome [this model filters ordering]
+    (let [ conn (.open _db) ]
+      (try
+        (let [ zm (get _metaCache model)
+               tbl (table-name zm)
+               s (str "SELECT * FROM " (ese tbl))
+               [wc pms] (sql-filter-clause filters)
+               extra (if (SU/hgl? ordering) (str " ORDER BY " ordering) "") ]
+          (if (SU/hgl? wc)
+            (.doQuery _proc conn (str s " WHERE " wc extra) pms model)
+            (.doQuery _proc conn (str s extra) [] model)))
+        (finally
+          (.close _db conn)))))
 
-  (update [this obj] 
+  (update [this obj]
     (let [ conn (.open _db) ]
       (try
         (.setAutoCommit conn true)
-        (.doUpdate conn _proc obj)
+        (.doUpdate _proc conn obj)
         (finally (.close _db conn)))))
 
   (delete [this obj]
     (let [ conn (.open _db) ]
       (try
         (.setAutoCommit conn true)
-        (.doDelete conn _proc obj)
+        (.doDelete _proc conn obj)
         (finally (.close _db conn)))))
 
   (insert [this obj]
     (let [ conn (.open _db) ]
       (try
         (.setAutoCommit conn true)
-        (.doInsert conn _proc obj)
+        (.doInsert _proc conn obj)
         (finally (.close _db conn)))))
 
   (select [this sql params]
     (let [ conn (.open _db) ]
       (try
-        (-> (SQuery. conn sql params) (.select))
+        (.doQuery _proc conn sql params)
       (finally (.close _db conn)))))
 
   (executeWithOutput [this sql pms]
@@ -75,7 +83,7 @@
   (execute [this sql pms]
     (let [ conn (.open _db) ]
       (try
-        (.setAutoCommit c true)
+        (.setAutoCommit conn true)
         (doExecute _proc conn sql pms)
       (finally (.close _db conn)))))
 
@@ -89,10 +97,7 @@
     (let [ conn (.open _db) ]
       (try
         (.doPurge _proc conn model)
-      (finally (.close _db conn)))))
-
-  )
-
+      (finally (.close _db conn)))))   )
 
 (def ^:private simple-eof nil)
 

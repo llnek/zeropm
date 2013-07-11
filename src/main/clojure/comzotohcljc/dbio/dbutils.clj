@@ -4,9 +4,18 @@
 
 (use '[clojure.tools.logging :only (info warn error debug)])
 (use '[clojure.set])
+
+(import '(java.util GregorianCalendar TimeZone Properties))
 (import '(com.zotoh.frwk.dbio DBIOError))
+(import '(java.sql DatabaseMetaData Connection Driver DriverManager))
+
 (require '[comzotohcljc.util.coreutils :as CU])
 (require '[comzotohcljc.util.strutils :as SU])
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def ^:dynamic *GMT-CAL* (GregorianCalendar. (TimeZone/getTimeZone "GMT")) )
+(defrecord JDBCInfo [driver url user pwdObj] )
 
 (def ^:dynamic *DBTYPES* {
     :sqlserver { :test-string "select count(*) from sysusers" }
@@ -15,6 +24,16 @@
     :h2  { :test-string "select 1" }
     :oracle { :test-string "select 1 from DUAL" }
   })
+
+(defn- maybeGetVendor [product]
+  (let [ lp (.toLowerCase product) ]
+    (cond
+      (SU/has-nocase? lp "microsoft") :sqlserver
+      (SU/has-nocase? lp "postgres") :postgresql
+      (SU/has-nocase? lp "h2") :h2
+      (SU/has-nocase? lp "oracle") :oracle
+      (SU/has-nocase? lp "mysql") :mysql
+      :else (throw (DBIOError. (str "Unknown db product " product))))))
 
 (defn match-dbtype ^{ :doc "" }
   [dbtype]
@@ -293,6 +312,136 @@
 
 
 (def testschema (Schema. [ president address person bankacct ]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn- safeGetConn [jdbc]
+  (let [ d (if (SU/hgl? (:url jdbc))
+               (DriverManager/getDriver (:url jdbc))
+               nil)
+         p (if (SU/hgl? (:user jdbc))
+               (doto (Properties.) (.put "password" (SU/nsb (:pwdObj jdbc)))
+                                   (.put "user" (:user jdbc)) 
+                                   (.put "username" (:user jdbc)))
+               (Properties.)) ] 
+    (when (nil? d)
+      (throw (DBIOError. (str "Can't load Jdbc Url: " (:url jdbc)))))
+    (when
+      (and (SU/hgl? (:driver jdbc))
+           (not= (-> d (.getClass) (.getName)) (:driver jdbc)))
+        (warn "Expected " (:driver jdbc) ", loaded with driver: " (.getClass d)))
+    (.connect d (:url jdbc) p)))
+
+(defn make-connection ^{ :doc "" }
+  [jdbc]
+  (let [ conn (if (SU/hgl? (:user jdbc))
+                (safeGetConn jdbc)
+                (DriverManager/getConnection (:url jdbc))) ]
+    (when (nil? conn)
+      (throw (DBIOError. (str "Failed to create db connection: " (:url jdbc)))))
+    (doto conn
+      (.setTransactionIsolation  Connection/TRANSACTION_READ_COMMITTED))))
+
+(defn test-connection ^{ :doc "" }
+  [jdbc]
+  (CU/TryC (.close (make-connection jdbc))))
+
+(defmulti resolve-vendor class)
+
+(defmethod ^{ :doc "" } resolve-vendor JDBCInfo
+  [jdbc]
+  (with-open [ conn (make-connection jdbc) ]
+    (resolve-vendor conn)))
+
+(defmethod ^{ :doc "" } resolve-vendor Connection
+  [conn]
+  (let [ md (.getMetaData conn) ]
+    (-> { :id (maybeGetVendor (.getDatabaseProductName md)) }
+      (assoc :version (.getDatabaseProductVersion md))
+      (assoc :name (.getDatabaseProductName md))
+      (assoc :quote-string (.getIdentifierQuoteString md))
+      (assoc :url (.getURL md))
+      (assoc :user (.getUserName md))
+      (assoc :lcis (.storesLowerCaseIdentifiers md))
+      (assoc :ucis (.storesUpperCaseIdentifiers md))
+      (assoc :mcis (.storesMixedCaseIdentifiers md)))))
+
+
+(defmulti ^{ :doc "" } table-exist? (fn [a b] (class a)))
+
+(defmethod table-exist? JDBCInfo [jdbc table]
+  (with-open [ conn (make-connection jdbc) ]
+    (table-exist? conn table)))
+
+(defmethod table-exist? Connection [conn table]
+  (let [ rc (atom false) ]
+    (try
+      (let [ mt (.getMetaData conn)
+             tbl (cond
+                    (.storesUpperCaseIdentifiers mt) (.toUpperCase table)
+                    (.storesLowerCaseIdentifiers mt) (.toLowerCase table)
+                    :else table) ]
+        (with-open [ res (.getColumns mt nil nil tbl nil) ]
+          (when (and (not (nil? res)) (.next res))
+            (reset! rc true))))
+      (catch Throwable e# nil))
+    @rc))
+
+(defmulti ^{ :doc "" } row-exist? (fn [a b] (class a)))
+
+(defmethod row-exist? JDBCInfo [jdbc table]
+  (with-open [ conn (make-connection jdbc) ]
+    (row-exist? conn table)))
+
+(defmethod row-exist? Connection [conn table]
+  (let [ rc (atom false) ]
+    (try
+      (let [ sql (str "SELECT COUNT(*) FROM  " (.toUpperCase table)) ]
+        (with-open [ stmt (.createStatement conn) ]
+          (with-open [ res (.executeQuery stmt) ]
+            (when (and (not (nil? res)) (.next res))
+              (reset! rc (> (.getInt res (int 1)) 0))))))
+      (catch Throwable e# nil))
+    @rc))
+
+(defn- load-columns [mt catalog schema table]
+  (let [ pkeys (atom #{}) cms (atom {}) ]
+    (with-open [ rs (.getPrimaryKeys mt catalog schema table) ]
+      (loop [ sum #{} more (.next rs) ]
+        (if (not more)
+          (reset! pkeys sum)
+          (recur
+            (conj sum (.toUpperCase (.getString rs (int 4))) )
+            (.next rs)))))
+    (with-open [ rs (.getColumns mt catalog schema table "%") ]
+      (loop [ sum {} more (.next rs) ]
+        (if (not more)
+          (reset! cms sum)
+          (let [ opt (not= (.getInt rs (int 11)) DatabaseMetaData/columnNoNulls)
+                 cn (.toUpperCase (.getString rs (int 4)))
+                 ctype (.getInt rs (int 5)) ]
+            (recur
+              (assoc sum (keyword cn) 
+                  { :column cn :sql-type ctype :null opt 
+                    :pkey (clojure.core/contains? pkeys cn) })
+              (.next rs))))))
+
+    (with-meta @cms { :supportsGetGeneratedKeys (.supportsGetGeneratedKeys mt)
+                      :supportsTransactions (.supportsTransactions mt) } )))
+
+(defn load-table-meta ^{ :doc "" }
+  [conn table]
+  (let [ mt (.getMetaData conn) dbv (resolve-vendor conn) 
+         catalog nil
+         schema (if (= (:id dbv) :oracle) "%" nil)
+         tbl (cond
+                (.storesUpperCaseIdentifiers mt) (.toUpperCase table)
+                (.storesLowerCaseIdentifiers mt) (.toLowerCase table)
+                :else table) ]
+    ;; not good, try mixed case... arrrrrrrrrrhhhhhhhhhhhhhh
+    ;;rs = m.getTables( catalog, schema, "%", null)
+    (load-columns mt catalog schema tbl)))
 
 
 (def ^:private dbutils-eof nil)

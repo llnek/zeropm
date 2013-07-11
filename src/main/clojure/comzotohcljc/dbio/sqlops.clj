@@ -26,10 +26,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(def ^:dynamic *GMT-CAL* (GregorianCalendar. (TimeZone/getTimeZone "GMT")) )
-(defrecord JDBCInfo [driver url user pwdObj] )
-
-(defn- uc-ent [ent] (.toUpperCase (name ent)))
 (defn- lc-ent [ent] (.toLowerCase (name ent)))
 
 (defn ese ^{ :doc "Escape string entity for sql." }
@@ -84,7 +80,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- to-filter-clause [filters]
+(defn sql-filter-clause [filters]
   (let [ wc (reduce (fn [sum en]
                 (SU/add-delim! sum " AND "
                    (str (ese (first en)) (if (nil? (last en)) " IS NULL " " = ? "))))
@@ -202,14 +198,14 @@
                 :else (.getLong rs (:pkey options))) ]
     { :1 rc }))
 
-(defprotocol SQueryAPI
-  (executeWithOutput [_  sql pms options] )
-  (select [_ sql pms row-provider-func] )
-  (execute [_  sql pms] ) )
+(defprotocol ^:private SQueryAPI
+  (sql-select [_ sql pms row-provider-func] [_ sql pms] )
+  (sql-executeWithOutput [_  sql pms options] )
+  (sql-execute [_  sql pms] ) )
 
-(deftype SQuery [_db _metaCache _conn] SQueryAPI
+(deftype ^:private SQuery [_db _metaCache _conn] SQueryAPI
 
-  (executeWithOutput [this sql pms options]
+  (sql-executeWithOutput [this sql pms options]
     (with-open [ stmt (build-stmt _db _conn sql pms) ]
       (with-open [ rc (.executeUpdate stmt) ]
           (with-open [ rs (.getGeneratedKeys stmt) ]
@@ -221,7 +217,8 @@
                 {}
                 ))))))
 
-  (select [this sql pms func]
+  (sql-select [this sql pms ] (sql-select this sql pms (partial row2obj std-injtor)))
+  (sql-select [this sql pms func]
     (with-open [ stmt (build-stmt _db _conn sql pms) ]
       (with-open [ rs (.executeQuery stmt) ]
         (let [ rsmeta (.getMetaData rs) ]
@@ -230,7 +227,7 @@
               sum
               (recur (conj sum (apply func rs rsmeta)) (.next rs))))))))
 
-  (execute [this sql pms]
+  (sql-execute [this sql pms]
     (with-open [ stmt (build-stmt _db _conn sql pms) ]
       (.executeUpdate stmt)))  )
 
@@ -256,11 +253,11 @@
         (throw (DBIOError. (str "Unknown model " model))))
       (let [ px (partial model-injtor _metaCache zm) 
              pf (partial row2obj px) ]
-        (-> (SQuery. _db _metaCache conn) (.select sql pms pf )))))
+        (-> (SQuery. _db _metaCache conn) (.sql-select sql pms pf )))))
 
   (doQuery [_ conn sql pms]
     (let [ pf (partial row2obj std-injtor) ]
-      (-> (SQuery. _db _metaCache conn) (.select sql pms pf ))) )
+      (-> (SQuery. _db _metaCache conn) (.sql-select sql pms pf ))) )
 
   (doCount [this conn model]
     (let [ rc (doQuery this conn
@@ -272,7 +269,7 @@
 
   (doPurge [_ conn model]
     (let [ sql (str "DELETE FROM " (ese (table-name model _metaCache))) ]
-      (do (-> (SQuery. _db _metaCache conn) (.execute sql [])) nil)))
+      (do (-> (SQuery. _db _metaCache conn) (.sql-execute sql [])) nil)))
 
   (doDelete [this conn obj]
     (let [ info (meta obj) model (:typeid info) zm (get _metaCache model) ]
@@ -363,13 +360,29 @@
 
   (doExecuteWithOutput [this conn sql pms options]
     (-> (SQuery. _db _metaCache conn)
-        (.executeWithOutput sql pms options)))
+        (.sql-executeWithOutput sql pms options)))
 
   (doExecute [this conn sql pms]
-    (-> (SQuery. _db _metaCache conn) (.execute sql pms)))
+    (-> (SQuery. _db _metaCache conn) (.sql-execute sql pms))) )
 
-)
+(defprotocol Transactable
+  (execWith [_ func] )
+  (begin [_] )
+  (commit [_ conn] )
+  (rollback [_ conn] ))
 
+(defprotocol SQLr
+  (findSome [_  model filters ordering] [_   model filters]  )
+  (findAll [_ model ordering] [_ model] )
+  (findOne [_  model filters] )
+  (update [_  obj] )
+  (delete [_  obj] )
+  (insert [_  obj] )
+  (select [_  sql params] )
+  (executeWithOutput [_  sql pms] )
+  (execute [_  sql pms] )
+  (count* [_  model] )
+  (purge [_  model] ) )
 
 (def ^:private sqlops-eof nil)
 
