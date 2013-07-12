@@ -5,11 +5,14 @@
 (use '[clojure.tools.logging :only (info warn error debug)])
 (use '[clojure.set])
 
-(import '(java.util GregorianCalendar TimeZone Properties))
-(import '(com.zotoh.frwk.dbio DBIOError))
 (import '(java.sql DatabaseMetaData Connection Driver DriverManager))
+(import '(java.util GregorianCalendar TimeZone Properties))
+(import '(java.lang Math))
+(import '(com.zotoh.frwk.dbio DBIOError))
+(import '(com.jolbox.bonecp BoneCP BoneCPConfig))
 
 (require '[comzotohcljc.util.coreutils :as CU])
+(require '[comzotohcljc.util.metautils :as MU])
 (require '[comzotohcljc.util.strutils :as SU])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -246,7 +249,7 @@
 (defn- colmap-fields [flds]
   (let [ sum (atom {}) ]
     (doseq [ [k v] (seq flds) ]
-      (let [ cn (:column v) ]
+      (let [ cn (.toUpperCase (:column v)) ]
         (reset! sum (assoc @sum cn v))))
     @sum))
 
@@ -424,7 +427,7 @@
             (recur
               (assoc sum (keyword cn) 
                   { :column cn :sql-type ctype :null opt 
-                    :pkey (clojure.core/contains? pkeys cn) })
+                    :pkey (clojure.core/contains? @pkeys cn) })
               (.next rs))))))
 
     (with-meta @cms { :supportsGetGeneratedKeys (.supportsGetGeneratedKeys mt)
@@ -442,6 +445,50 @@
     ;; not good, try mixed case... arrrrrrrrrrhhhhhhhhhhhhhh
     ;;rs = m.getTables( catalog, schema, "%", null)
     (load-columns mt catalog schema tbl)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defprotocol JDBCPoolAPI
+  (shutdown [_] )
+  (next-free [_] ))
+
+(deftype JDBCPool [_jdbc _impl] JDBCPoolAPI
+
+  (shutdown [_] (.shutdown _impl))
+  (next-free  [_]
+    (try
+      (.getConnection _impl)
+      (catch Throwable e#
+        (throw (DBIOError. (str "No free connection."))))))
+
+)
+
+(defn make-db-pool ^{ :doc "" }
+  ([jdbc] (make-db-pool jdbc {}))
+  ([jdbc options]
+    (let [ bcf (BoneCPConfig.) ]
+      (debug "Driver : " (:driver jdbc))
+      (debug "URL : "  (:url jdbc))
+      (when (SU/hgl? (:driver jdbc)) (MU/for-name (:driver jdbc)))
+      (doto bcf
+        (.setPartitionCount (Math/max 1 (CU/nnz (:partitions options))))
+        (.setLogStatementsEnabled (CU/nbf (:debug options)))
+        (.setPassword (SU/nsb (:pwdObj jdbc)))
+        (.setJdbcUrl (:url jdbc))
+        (.setUsername (:user jdbc))
+        (.setIdleMaxAgeInSeconds (* 60 60 24)) ;; 1 day
+        (.setMaxConnectionsPerPartition (Math/max 2 (CU/nnz (:max-conns options))))
+        (.setMinConnectionsPerPartition (Math/max 1 (CU/nnz (:min-conns options))))
+        (.setPoolName (CU/uid))
+        (.setAcquireRetryDelayInMs 5000)
+        (.setConnectionTimeoutInMs  (Math/max 5000 (CU/nnz (:max-conn-wait options))))
+        (.setDefaultAutoCommit false)
+        (.setAcquireRetryAttempts 1))
+      (JDBCPool. jdbc (BoneCP. bcf))))  )
+
 
 
 (def ^:private dbutils-eof nil)

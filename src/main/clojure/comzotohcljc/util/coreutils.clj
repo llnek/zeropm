@@ -68,8 +68,9 @@
     (empty? vs) []
     :else (into [] (remove nil? vs))))
 
-(defn ndz [^double d] (if (nil? d) 0.0 d))
-(defn nnz [^long n] (if (nil? n) 0 n))
+(defn ndz [d] (if (nil? d) 0.0 d))
+(defn nnz [n] (if (nil? n) 0 n))
+(defn nbf [b] (if (nil? b) false b))
 
 (defn match-char? ^{ :doc "Returns true if this char exists inside this set of chars." }
   [ch setOfChars]

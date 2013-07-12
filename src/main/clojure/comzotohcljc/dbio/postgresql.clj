@@ -29,7 +29,7 @@
 (defmethod genDrop Postgresql [db table]
   (str "DROP TABLE IF EXISTS " table " CASCADE" (genExec db) "\n\n"))
 
-
+;;(def XXX (.getMetas (make-MetaCache testschema)))
 ;;(println (getDDL (Postgresql.) (make-MetaCache testschema)))
 
 
