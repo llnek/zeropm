@@ -10,11 +10,6 @@
 (import '(com.zotoh.frwk.dbio DBIOError))
 (import '(java.util HashMap))
 
-(def ^:dynamic *USE_DDL_SEP* true)
-(def ^:dynamic *DDL_SEP* "-- :")
-(def ^:dynamic *DDL_BVS* nil)
-
-
 (defprotocol DBDriver
   (getTestString [_] )
   (getId [_] ))

@@ -43,10 +43,11 @@
       (PropertyResourceBundle. inp)))
 
 (defn get-resource ^{ :doc "Return a resource bundle." }
-  [^String baseName ^Locale locale ^ClassLoader cl]
-  (if (or (nil? baseName)(nil? locale))
-    nil
-    (ResourceBundle/getBundle baseName locale (MU/get-cldr cl))) )
+  ([^String baseName ^Locale locale] (get-resource baseName locale nil))
+  ([^String baseName ^Locale locale ^ClassLoader cl]
+    (if (or (nil? baseName)(nil? locale))
+      nil
+      (ResourceBundle/getBundle baseName locale (MU/get-cldr cl))) ))
 
 (defn get-string ^{ :doc "Return the string value for this key, pms may contain values for positional substitutions." }
   [^ResourceBundle bundle ^String pkey pms]

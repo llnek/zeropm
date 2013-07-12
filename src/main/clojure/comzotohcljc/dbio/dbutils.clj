@@ -5,11 +5,12 @@
 (use '[clojure.tools.logging :only (info warn error debug)])
 (use '[clojure.set])
 
-(import '(java.sql DatabaseMetaData Connection Driver DriverManager))
+(import '(java.sql SQLException DatabaseMetaData Connection Driver DriverManager))
 (import '(java.util GregorianCalendar TimeZone Properties))
 (import '(java.lang Math))
 (import '(com.zotoh.frwk.dbio DBIOError))
 (import '(com.jolbox.bonecp BoneCP BoneCPConfig))
+(import '(org.apache.commons.lang3 StringUtils))
 
 (require '[comzotohcljc.util.coreutils :as CU])
 (require '[comzotohcljc.util.metautils :as MU])
@@ -18,6 +19,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def ^:dynamic *GMT-CAL* (GregorianCalendar. (TimeZone/getTimeZone "GMT")) )
+(def ^:dynamic *USE_DDL_SEP* true)
+(def ^:dynamic *DDL_SEP* "-- :")
+(def ^:dynamic *DDL_BVS* nil)
 (defrecord JDBCInfo [driver url user pwdObj] )
 
 (def ^:dynamic *DBTYPES* {
@@ -488,6 +492,56 @@
         (.setDefaultAutoCommit false)
         (.setAcquireRetryAttempts 1))
       (JDBCPool. jdbc (BoneCP. bcf))))  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn- splitLines [lines]
+  (let [ w (.length *DDL_SEP*) rc (atom []) s2 (atom lines) ]
+    (loop [ sum [] ddl lines pos (.indexOf ddl *DDL_SEP*) ]
+      (if (< pos 0)
+        (do (reset! rc sum) (reset! s2 (SU/strim ddl)))
+        (let [ nl (SU/strim (.substring ddl 0 pos))
+               d2 (.substring ddl (+ pos w))
+               p2 (.indexOf d2 *DDL_SEP*) ]
+          (recur (conj sum nl) d2 p2))))
+    (if (SU/hgl? @s2)
+      (conj @rc @s2)
+      @rc)) )
+
+(defn- maybeOK [dbn e]
+  (let [ oracle (SU/embeds? (SU/nsb dbn) "oracle")
+         ee (CU/root-cause e)
+         ec (if (instance? SQLException ee) (.getErrorCode ee) nil) ]
+    (if (nil? ec)
+      (throw e)
+      (cond
+        (and oracle (= 942 ec)(= 1418 ec)(= 2289 ec)(= 0 ec)) true
+        :else (throw e)))))
+
+(defmulti ^{ :doc "" } upload-ddl (fn [a b] (class a)))
+
+(defmethod ^{ :doc "" } upload-ddl JDBCInfo [jdbc ddl]
+   (with-open [ conn (make-connection jdbc) ]
+     (upload-ddl conn ddl)))
+
+(defmethod ^{ :doc "" } upload-ddl Connection [conn ddl]
+    (let [ dbn (.toLowerCase (-> (.getMetaData conn)(.getDatabaseProductName)))
+           lines (splitLines ddl) ]
+      (.setAutoCommit conn true)
+      (doseq [ line (seq lines) ]
+        (let [ ln (StringUtils/strip (SU/strim line) ";") ]
+          (when (and (SU/hgl? ln) (not= (.toLowerCase ln) "go"))
+            (try
+              (with-open [ stmt (.createStatement conn) ]
+                (.executeUpdate stmt ln))
+              (catch SQLException e#
+                (maybeOK dbn e#))))))))
+
+
+
+
+
 
 
 
