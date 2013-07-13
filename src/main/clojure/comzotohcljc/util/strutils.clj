@@ -67,6 +67,10 @@
   [^String s]
   (if (nil? s) false (> (.length s) 0)))
 
+(defn nichts?  ^{ :doc "Returns true if this string is empty." }
+  [^String s] 
+  (not (hgl? s)))
+
 (defn strim ^{ :doc "Safely trim this string - handles null." }
   [^String s]
   (if (nil? s) "" (.trim s)))

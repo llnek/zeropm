@@ -404,7 +404,7 @@
 (defn into-map ^{ :doc "" }
      [^Properties props]
        (reduce (fn [sum k]
-                   (assoc sum k (.get props k))) {} (seq (.keySet props))))
+                   (assoc sum (keyword k) (.get props k))) {} (seq (.keySet props))))
 
 
 

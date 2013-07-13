@@ -79,11 +79,11 @@
   (do
     (loop [ rc (popQ cout cin (get cmdQNs start) props) ]
       (cond
-        (StringUtils/isEmpty rc) props
+        (StringUtils/isEmpty rc) (CU/into-map props)
         (nil? rc) nil
         :else (recur (popQ cout cin (get cmdQNs rc) props))))))
 
-(defn converse [cmdQs q1]
+(defn cli-converse [cmdQs q1]
   (let [ kp (if (CU/is-windows?) "<Ctrl-C>" "<Ctrl-D>")
          cout (OutputStreamWriter. (BufferedOutputStream. (System/out)))
          cin (InputStreamReader. (System/in))

@@ -25,8 +25,16 @@
 (use '[clojure.tools.logging :only (info debug)])
 (require '[comzotohcljc.util.coreutils :as CU])
 (require '[comzotohcljc.util.strutils :as SU])
+(require '[comzotohcljc.util.fileutils :as FU])
 (require '[comzotohcljc.util.constants :as CS])
 (require '[comzotohcljc.i18n.i18nutils :as LU])
+(require '[comzotohcljc.blason.etc.cmdline :as CL])
+(import '(java.io File))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def ^:private CMDLINE-INFO [
   ["create web[/jetty]"  "e.g. create app as a webapp."]
@@ -50,56 +58,61 @@
   ["demo samples" "Generate a set of samples."]
   ["version" "Show version info."] ])
 
-(defprotocol AppRunnerAPI
-  ())
-(deftype AppRunner [] AppRunnerAPI
-  (start [this args]
-    (if (not (parse-args this args))
-      (usage this)
-      nil))
-  (usage [_]
-    (println (SU/make-string \= 78))
-    (println "> blason <commands & options>")
-    (println "> -----------------")
-    drawHelpLines("> %-35s\' %s\n", a)
-    println(">")
-    println("> help - show standard commands")
-    println(mkString('=',78))
-  }
+(defn- drawHelpLines [fmt arr]
+  (doseq [ v (seq arr) ]
+    (-> System/out (.format fmt (first v) (last v)))))
+
+(defn- usage []
+  (println (SU/make-string \= 78))
+  (println "> blason <commands & options>")
+  (println "> -----------------")
+  (drawHelpLines "> %-35s\' %s\n" CMDLINE-INFO)
+  (println ">")
+  (println "> help - show standard commands")
+  (println (SU/make-string \= 78)) )
 
 
-
-      //println("#### apprunner loader = " + getClass().getClassLoader().getClass().getName())
-      //println("#### sys loader = " + ClassLoader.getSystemClassLoader().getClass().getName())
 ;; arg(0) is blason-home
+;;println("#### apprunner loader = " + getClass().getClassLoader().getClass().getName())
+;;println("#### sys loader = " + ClassLoader.getSystemClassLoader().getClass().getName())
+;;mkCZldrs(home)
 (defn- parseArgs [rcb args]
-  (let [ home (CU/trim-lastPathSep (nice-fpath (nth args 0)))
-         h (File. home)
-         c (CmdArgs. h (CU/getcwd) rcb) ]
-    (if (not (FU/dir-read? h))
-      false
-      (if (not (-> (.getCmds c)(.contains (nth args 1))))
+  (let [ h (File. (first args)) ]
+    (CU/test-cond (str "Cannot access Blason home " h) (FU/dir-read? h))
+      (if (not (contains? (CL/get-commands) (keyword (nth args 1))))
         false
-        (try (.eval c ( Arrays.copyOfRange(args, 1, args.size)); true } catch { case _:Throwable => false
+        (fn [] (CL/eval-command h rcb (drop 1 args))))))
 
 
 (defn -main ^{ :doc "" }
   [& args]
   (alter-var-root #'*read-eval* (constantly false))
   (let [ rcb (LU/get-resource "comzotohcljc/blason/etc/Resources" (Locale/getDefault)) ]
-    (if (or (< (.size args) 2) (not (parseArgs rcb args)))
+    (if (< (.size args) 2)
       (usage)
-      nil)))
+      (let [ rc (parseArgs rcb args) ]
+        (if (fn? rc)
+          (rc)
+          (usage))))))
+
+;;(info "hello" 23 "is me!")
+;;(println (CS/COPYRIGHT)) )
 
 
 
 
 
-  ;;(info "hello" 23 "is me!")
-  ;;(println (CS/COPYRIGHT)) )
 
 
 
 
 
+
+
+
+
+
+
+
+(def ^:private core-eof nil)
 
