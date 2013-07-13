@@ -29,6 +29,7 @@
 (require '[comzotohcljc.util.constants :as CS])
 (require '[comzotohcljc.i18n.i18nutils :as LU])
 (require '[comzotohcljc.blason.etc.cmdline :as CL])
+(import '(java.util Locale))
 (import '(java.io File))
 
 
@@ -66,7 +67,7 @@
   (println (SU/make-string \= 78))
   (println "> blason <commands & options>")
   (println "> -----------------")
-  (drawHelpLines "> %-35s\' %s\n" CMDLINE-INFO)
+  (drawHelpLines "> %-35s %s\n" CMDLINE-INFO)
   (println ">")
   (println "> help - show standard commands")
   (println (SU/make-string \= 78)) )

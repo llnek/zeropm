@@ -22,6 +22,9 @@
        :author "kenl" }
   comzotohcljc.blason.etc.cmdline )
 
+(use '[clojure.tools.logging :only (info warn error debug)])
+
+(import '(org.apache.commons.lang3 StringUtils))
 (import '(com.zotoh.blason.etc CmdHelpError))
 (import '(org.apache.commons.io FileUtils))
 (import '(java.io File))
@@ -30,6 +33,7 @@
 (require '[comzotohcljc.util.coreutils :as CU])
 (require '[comzotohcljc.util.metautils :as MU])
 (require '[comzotohcljc.util.strutils :as SU])
+(require '[comzotohcljc.blason.core.climain :as CLI])
 
 (use '[comzotohcljc.blason.etc.constants])
 (use '[comzotohcljc.util.cmdlineseq])
@@ -135,19 +139,27 @@
         (runTargetExtra "create-demo" { :demo-id s})) )
     (throw (CmdHelpError.))))
 
+(defn- generatePassword [] nil)
+(defn- keyfile [] nil)
+(defn- csrfile [] nil)
+
 (defn- onGenerate [args]
   (if (> (.size args) 1)
     (case (nth args 1)
       "password" (generatePassword)
       "serverkey" (keyfile)
-      "csr" => (csrfile)
+      "csr" (csrfile)
       (throw (CmdHelpError.)))
     (throw (CmdHelpError.))))
+
+(defn- encrypt [a b] nil)
 
 (defn- onEncrypt [args]
   (if (> (.size args) 2)
     (encrypt  (nth args 1) (nth args 2))
     (throw (CmdHelpError.))))
+
+(defn- decrypt [a b] nil)
 
 (defn- onDecrypt [args]
   (if (> (.size args) 2)
@@ -185,10 +197,10 @@
     (FileUtils/cleanDirectory ec)
     (FileUtils/writeStringToFile (File. ec ".project")
       (-> (CU/rc-str (str "com/zotoh/blason/eclipse/" lang "/project.txt") "utf-8")
-          (StringUtils.replace "${APP.NAME}" app)
-          (StringUtils.replace "${" ulang ".SRC}"
+          (StringUtils/replace "${APP.NAME}" app)
+          (StringUtils/replace (str "${" ulang ".SRC}")
                (CU/nice-fpath (File. cwd (str "src/main/" lang))))
-          (StringUtils.replace "${TEST.SRC}"
+          (StringUtils/replace "${TEST.SRC}"
                (CU/nice-fpath (File. cwd (str "src/test/" lang)))))
       "utf-8")
     (scanJars (File. (getHomeDir) DN_DIST) sb)
@@ -230,7 +242,7 @@
   [home rcb args]
   (let [ v (get _ARGS (keyword (first args))) ]
     (when (nil? v) (throw (CmdHelpError.)))
-    (binding [ *BLASON-HOME-DIR* h *BLASON-RSBUNDLE* rcb]
+    (binding [ *BLASON-HOME-DIR* home *BLASON-RSBUNDLE* rcb]
       (apply v rcb args))))
 
 (defn get-commands ^{ :doc "" }

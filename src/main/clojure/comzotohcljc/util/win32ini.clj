@@ -86,8 +86,9 @@
 (defn- getKV [cf s k err]
   (let [ mp (.getSectionAsMap cf s) ]
     (cond
-      (nil? mp) (if err (throwBadMap s) "")
-      (nil? k) (if err (throwBadKey k) "")
+      (nil? mp) (if err (throwBadMap s) nil)
+      (nil? k) (if err (throwBadKey k) nil)
+      (not (hasKV mp k)) (if err (throwBadKey k) nil)
       :else (.get mp k))))
 
 (deftype Win32Conf [mapOfSections] IWin32Conf
@@ -103,26 +104,36 @@
   (getString [this section property]
     (SU/nsb (getKV this section property true)))
 
-  (optString [this section property]
-    (SU/nsb (getKV this section property false)))
+  (optString [this section property dft]
+    (let [ rc (getKV this section property false) ]
+      (if (nil? rc) dft rc)))
 
   (getLong [this section property]
     (CU/conv-long (getKV this section property true) 0))
 
-  (optLong [this section property]
-    (CU/conv-long (getKV this section property false) 0))
+  (optLong [this section property dft]
+    (let [ rc (getKV this section property false) ]
+      (if (nil? rc)
+        dft 
+        (CU/conv-long rc 0))))
 
   (getDouble [this section property]
     (CU/conv-double (getKV this section property true) 0.0))
 
-  (optDouble [this section property]
-    (CU/conv-double (getKV this section property false) 0.0))
+  (optDouble [this section property dft]
+    (let [ rc (getKV this section property false) ]
+      (if (nil? rc)
+        dft
+        (CU/conv-double rc 0.0))))
 
   (getBool [this section property]
     (CU/conv-bool (getKV this section property true) false))
 
-  (optBool [this section property]
-    (CU/conv-bool (getKV this section property false) false))
+  (optBool [this section property dft]
+    (let [ rc (getKV this section property false) ]
+      (if (nil? rc)
+        dft
+        (CU/conv-bool rc false))))
 
   (dbgShow [this]
     (let [ buf (StringBuilder.) ]

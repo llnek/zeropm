@@ -60,6 +60,19 @@
       <arg value="comzotohcljc.crypto.stores" />
       <arg value="comzotohcljc.net.netutils" />
       <arg value="comzotohcljc.netty.nettyio" />
+      <arg value="comzotohcljc.dbio.dbutils" />
+      <arg value="comzotohcljc.dbio.sqlserver" />
+      <arg value="comzotohcljc.dbio.h2" />
+      <arg value="comzotohcljc.dbio.oracle" />
+      <arg value="comzotohcljc.dbio.mysql" />
+      <arg value="comzotohcljc.dbio.postgresql" />
+      <arg value="comzotohcljc.dbio.dbdrivers" />
+      <arg value="comzotohcljc.dbio.sqlops" />
+      <arg value="comzotohcljc.dbio.simple" />
+      <arg value="comzotohcljc.dbio.composite" />
+      <arg value="comzotohcljc.blason.etc.constants" />
+      <arg value="comzotohcljc.blason.core.climain" />
+      <arg value="comzotohcljc.blason.etc.cmdline" />
       <arg value="comzotohcljc.blason.etc.core" />
     </java>
   </target>

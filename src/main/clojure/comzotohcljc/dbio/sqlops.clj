@@ -26,6 +26,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn- uc-ent [ent] (.toUpperCase (name ent)))
 (defn- lc-ent [ent] (.toLowerCase (name ent)))
 
 (defn ese ^{ :doc "Escape string entity for sql." }
@@ -105,8 +106,8 @@
 
 (defn- readOneCol [sqlType pos rset]
   (let [ cv (case sqlType
-                Types/TIMESTAMP (.getTimestamp rset (int pos) *GMT-CAL*)
-                Types/DATE (.getDate rset (int pos) *GMT-CAL*)
+                Types/TIMESTAMP (.getTimestamp rset (int pos) DU/*GMT-CAL*)
+                Types/DATE (.getDate rset (int pos) DU/*GMT-CAL*)
                 (readCol sqlType pos rset)) ]
     cv))
 
@@ -156,9 +157,9 @@
     (instance? Double p) (.setDouble ps pos p)
     (instance? Float p) (.setFloat ps pos p)
 
-    (instance? Timestamp p) (.setTimestamp ps pos p *GMT-CAL*)
-    (instance? Date p) (.setDate ps pos p *GMT-CAL*)
-    (instance? Calendar p) (.setTimestamp ps pos (Timestamp. (.getTimeInMillis p)) *GMT-CAL*)
+    (instance? Timestamp p) (.setTimestamp ps pos p DU/*GMT-CAL*)
+    (instance? Date p) (.setDate ps pos p DU/*GMT-CAL*)
+    (instance? Calendar p) (.setTimestamp ps pos (Timestamp. (.getTimeInMillis p)) DU/*GMT-CAL*)
 
     :else (throw (DBIOError. (str "Unsupported param type: " (type p))))))
 
