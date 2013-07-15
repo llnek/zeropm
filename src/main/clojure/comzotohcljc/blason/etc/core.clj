@@ -26,9 +26,9 @@
 (require '[comzotohcljc.util.coreutils :as CU])
 (require '[comzotohcljc.util.strutils :as SU])
 (require '[comzotohcljc.util.fileutils :as FU])
-(require '[comzotohcljc.util.constants :as CS])
 (require '[comzotohcljc.i18n.i18nutils :as LU])
 (require '[comzotohcljc.blason.etc.cmdline :as CL])
+(import '(com.zotoh.blason.etc CmdHelpError))
 (import '(java.util Locale))
 (import '(java.io File))
 
@@ -96,8 +96,6 @@
           (rc)
           (usage))))))
 
-;;(info "hello" 23 "is me!")
-;;(println (CS/COPYRIGHT)) )
 
 
 

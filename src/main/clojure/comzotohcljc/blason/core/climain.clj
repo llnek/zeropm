@@ -22,13 +22,18 @@
        :author "kenl" }
   comzotohcljc.blason.core.climain )
 
-(require '[comzotohcljc.util.processutils :as PU])
+(use '[clojure.tools.logging :only (info warn error debug)])
+
+(require '[comzotohcljc.util.procutils :as PU])
 (require '[comzotohcljc.util.metautils :as MU])
 (require '[comzotohcljc.util.coreutils :as CU])
 (require '[comzotohcljc.util.strutils :as SU])
 (require '[comzotohcljc.util.fileutils :as FU])
 (require '[comzotohcljc.i18n.i18nutils :as LN])
-(use '[comzotohcljc.blason.etc.constants])
+(require '[comzotohcljc.util.win32ini :as WI])
+(import '(com.zotoh.blason.core ConfigError Constants AppClassLoader RootClassLoader ExecClassLoader))
+(import '(com.zotoh.blason.etc CmdHelpError))
+(import '(java.util Locale))
 (import '(java.io File))
 (import '(org.apache.commons.io FileUtils))
 
@@ -43,68 +48,69 @@
   (CU/test-cond (str d " must allow read-write.") (FU/dir-readwrite? d)) )
 
 (defn- inizContext [baseDir]
-  (let [ cfg (File. baseDir DN_CFG)
-         f (File. cfg (str "app/" PF_PROPS))
+  (let [ cfg (File. baseDir (Constants/DN_CFG))
+         f (File. cfg (str "app/" (Constants/PF_PROPS)))
          home (.getParentFile cfg) ]
     (precondDir home)
     (precondDir cfg)
     (precondFile f)
-    (doto (DefaultContext.)
-      (.put K_BASEDIR home)
-      (.put K_CFGDIR cfg))) )
+    (-> {}
+      (assoc (Constants/K_BASEDIR) home)
+      (assoc (Constants/K_CFGDIR) cfg))) )
 
-(defn- setupClassLoader [ctx root]
-  (let [ cl (ExecClassLoader. root) ]
-    (.put ctx K_EXEC_CZLR cl)
-    (MU/set-cldr cl)))
+(defn- setupClassLoader [ctx]
+  (let [ root (get ctx (Constants/K_ROOT_CZLR))
+         cl (ExecClassLoader. root) ]
+    (MU/set-cldr cl)
+    (assoc ctx (Constants/K_EXEC_CZLR) cl)))
 
 (defn- setupClassLoaderAsRoot [ctx]
   (let [ root (RootClassLoader. (MU/get-cldr)) ]
-    (.put ctx K_ROOT_CZLR root)
-    root))
+    (assoc ctx (Constants/K_ROOT_CZLR) root)))
 
 (defn- maybeInizLoaders [ctx]
   (let [ cz (MU/get-cldr) ]
     (if (instance? ExecClassLoader cz)
-      (doto ctx
-        (.put K_ROOT_CZLR (.getParent cz))
-        (.put K_EXEC_CZLR cz))
-      (setupClassLoader ctx (setupClassLoaderAsRoot)))) )
+      (-> ctx
+        (assoc (Constants/K_ROOT_CZLR) (.getParent cz))
+        (assoc (Constants/K_EXEC_CZLR) cz))
+      (setupClassLoader (setupClassLoaderAsRoot ctx)))) )
 
 (defn- loadConf [ctx home]
-  (let [ w (WI/parse-inifile (File. home  (str DN_CFG "/app/" PF_PROPS)))
-         lg (.toLowerCase (.optString w K_LOCALE K_LANG "en"))
-         cn (.toUpperCase (.optString w K_LOCALE K_COUNTRY ""))
+  (let [ w (WI/parse-inifile (File. home  (str (Constants/DN_CFG) "/app/" (Constants/PF_PROPS))))
+         lg (.toLowerCase (.optString w (Constants/K_LOCALE) (Constants/K_LANG) "en"))
+         cn (.toUpperCase (.optString w (Constants/K_LOCALE) (Constants/K_COUNTRY) ""))
          loc (if (SU/hgl? cn) (Locale. lg cn) (Locale. lg)) ]
-    (.put ctx PF_CLISH this) ;;TODO
-    (.put ctx PF_PROPS w)
-    loc))
+    (assoc ctx (Constants/PF_CLISH) nil) ;;TODO
+    (assoc ctx (Constants/PF_PROPS) w)
+    (assoc ctx (Constants/PF_L10N) loc)))
 
-(defn- setupResources [loc]
-  (let [ rc (LN/get-resource "comzotohcljc.blason.etc.Resources" loc) ]
-    { :string-bundle rc :locale loc } ))
+(defn- setupResources [ctx]
+  (let [ rc (LN/get-resource "comzotohcljc.blason.etc.Resources" (get ctx (Constants/PF_LOCALE))) ]
+    (assoc ctx (Constants/PF_L10N) rc)))
 
 (defn- pre-parse [args]
   (let [ bh (File. (first args))
-         cx (inizContext bh) ]
-    (precondDir (File. bh DN_PATCH))
-    (precondDir (File. bh DN_CORE))
-    (precondDir (File. bh DN_LIB))
-    (maybeInizLoaders)
-    (merge { :home bh :context cx } (setupResources (loadConf bh)) )))
+         ctx (inizContext bh) ]
+    (precondDir (File. bh (Constants/DN_PATCH)))
+    (precondDir (File. bh (Constants/DN_CORE)))
+    (precondDir (File. bh (Constants/DN_LIB)))
+    (->  ctx
+      (maybeInizLoaders)
+      (loadConf bh)
+      (setupResources ))))
 
-(defn- start-exec [env]
+(defn- start-exec [ctx]
   (do
     (info "About to start Blason...")
-    (-> (:exec-visor env) (.start))
+    (-> (get ctx (Constants/PF_EXECV)) (.start))
     (info "Blason started.")
-    env))
+    ctx))
 
-(defn- primodial [env]
-  (let [ ctx (:context env)
-         cl (.get ctx K_EXEC_CZLR)
-         wc (.get ctx PF_PROPS)
-         cz (.optString wc PF_COMPS PF_EXECV "") ]
+(defn- primodial [ctx]
+  (let [ cl (get ctx (Constants/K_EXEC_CZLR))
+         wc (get ctx (Constants/PF_PROPS))
+         cz (.optString wc (Constants/PF_COMPS) (Constants/PF_EXECV) "") ]
     (CU/test-nestr "conf file:exec-visor" cz)
     (let [ exec (MU/make-obj cz cl) ]
       (when (nil? exec)
@@ -112,36 +118,41 @@
       ;; order is important!
       (.contextualize exec ctx)
       (.initialize exec)
-      (assoc env :exec-visor exec))))
+      (assoc ctx (Constants/PF_EXECV) exec))))
 
 (defn- enableRemoteShutdown []
   (let [ port (CU/conv-long (System/getProperty "blason.kill.port") 4444) ]
     nil))
 
-(defn- stop-main [env]
-  (let [ pid (:pid-file env) exec (:exec-visor env) ]
+(defn- stop-main [ctx]
+  (let [ pid (get ctx (Constants/PF_PIDFILE))
+         exec (get ctx (Constants/PF_EXECV)) ]
     (when-not (nil? pid) (FileUtils/deleteQuietly pid))
     (info "About to stop Blason...")
     (.stop exec)
     (info "Blason stopped.")
     (send SHOW-STOPPER inc)))
 
-(defn- hookShutdown [env]
+(defn- hookShutdown [ctx]
   (let [ rt (Runtime/getRuntime) ]
     (.addShutdownHook rt (Thread. (reify Runnable
-                                    (run [_] (CU/TryC (stop-main env))))))
+                                    (run [_] (CU/TryC (stop-main ctx))))))
     (enableRemoteShutdown)
     (debug "Added shutdown hook.")
-    env))
+    ctx))
 
-(defn- writePID [env]
-  (let [ fp (File. (:home env) "blason.pid") ]
+(defn- writePID [ctx]
+  (let [ fp (File. (get ctx (Constants/K_BASEDIR)) "blason.pid") ]
     (FileUtils/writeStringToFile fp (PU/pid) "utf-8")
-    (assoc env :pid-file fp)))
+    (assoc ctx (Constants/PF_PIDFILE) fp)))
 
-(defn- pause-main [env]
-  (let [ ctx (:context env) ]
-    (.dbgShow ctx)
+(defn- debug-context [ctx]
+  (do 
+    (info ctx)))
+
+(defn- pause-main [ctx]
+  (do
+    (debug-context ctx)
     (info "Applications are now running...")
     (loop []
       (if (> @SHOW-STOPPER 0)
