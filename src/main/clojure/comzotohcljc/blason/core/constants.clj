@@ -98,6 +98,7 @@
 ;;(def K_ROOT :root-rego )
 
 (def K_ROOT_CZLR :root-loader )
+(def K_APP_CZLR :app-loader )
 (def K_EXEC_CZLR :exec-loader )
 
 (def K_BASEDIR :base-dir )
@@ -112,7 +113,9 @@
 
 (def K_COUNTRY :country )
 (def K_LOCALE :locale )
+(def K_L10N :l10n )
 (def K_LANG :lang )
+(def K_PIDFILE :pid-file )
 
 (def K_META :meta )
 

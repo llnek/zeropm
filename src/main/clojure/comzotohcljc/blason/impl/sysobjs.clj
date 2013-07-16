@@ -20,11 +20,12 @@
 
 (ns ^{ :doc ""
        :author "kenl" }
-  comzotohcljc.blason.core.impls )
+  comzotohcljc.blason.impl.sysobjs )
 
 (use '[clojure.tools.logging :only (info warn error debug)])
 
-(import '(com.zotoh.blason.core RegistryError ServiceError ConfigError))
+(import '(com.zotoh.blason.core 
+  RegistryError ServiceError ConfigError AppClassLoader))
 (import '(java.util Date))
 (import '(java.io File))
 (import '(org.apache.commons.io.filefilter DirectoryFileFilter))
@@ -36,6 +37,12 @@
 (require '[ comzotohcljc.util.fileutils :as FU ] )
 (require '[ comzotohcljc.util.metautils :as MU ] )
 (require '[ comzotohcljc.util.mimeutils :as MI ] )
+(require '[ comzotohcljc.util.procutils :as PU ] )
+
+(use '[comzotohcljc.blason.impl.execvisor :only (ExecvisorAPI) ])
+(use '[comzotohcljc.blason.impl.deployer :only (DeployerAPI) ])
+(use '[comzotohcljc.blason.impl.kernel :only (KernelAPI) ])
+
 (use '[comzotohcljc.blason.core.constants])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -61,14 +68,85 @@
 (defmulti comp-get-id class)
 (defmulti comp-parent class)
 
-(defmethod comp-get-id :default [c] (.cid c))
-(defmethod comp-get-version :default [c] "")
-(defmethod comp-parent :default [c] (.parent c))
+(defmulti comp-set-context (fn [a b] (class a)))
+(defmulti comp-get-context class)
+
+(defmulti comp-compose (fn [a rego & more] (class a)))
+(defmulti comp-contextualize (fn [a b] (class a)))
+(defmulti comp-configure class)
+(defmulti comp-initialize class)
+
+(defmulti comp-rego-contains? (fn [a b] (class a)))
+(defmulti comp-rego-find (fn [a b] (class a)))
+(defmulti comp-rego-remove (fn [a b] (class a)))
+(defmulti comp-rego-add (fn [a b] (class a)))
+(defmulti comp-get-cache class)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defmulti comp-set-context (fn [a b] (class a)))
-(defmulti comp-get-context class)
+(defprotocol Component  )
+(defprotocol Registry )
+(deftype ComponentRegistry [cname parent ctx cache] Registry Component )
+
+(deftype ServiceRegistry [cname parent ctx cache] Registry Component )
+
+(deftype AppRegistry [cname parent ctx cache] Registry Component )
+
+(deftype BlockRegistry [cname parent ctx cache] Registry Component )
+
+(deftype Deployer [cid parent ctx] Component DeployerAPI
+  (deploy [this src]
+    (let [ app (FilenameUtils/getBaseName (CU/nice-fpath src))
+           ctx (comp-get-context this)
+           des (File. (:K_PLAYDIR ctx) app)
+           fp (File. (.toURI src)) ]
+      (if (not (.exists des))
+        (FU/unzip fp des)
+        (info "deployer: app: " app " has already been deployed."))))
+  (undeploy [this app]
+    (let [ ctx (comp-get-context this) dir (File. (K_PLAYDIR ctx) app) ]
+      (if (.exists dir)
+        (do
+          (FileUtils/deleteDirectory dir)
+          (info "deployer: undeployed app: " app) )
+        (warn "deployer: cannot undeploy app: " app ", doesn't exist - no operation taken.")))))
+
+(defn- make-container [c]
+  nil)
+
+(defn- maybe-start-pod [apps c]
+  (try
+    (let [ cid (.cid c) ctr (make-container c) ]
+      (if true ;;(.isEnabled ctr)
+        (do
+          (comp-rego-add apps cid ctr)
+        ;;_jmx.register(ctr,"", c.name)
+          )
+        (info "kernel: container " cid " is set off-line")) )
+    (catch Throwable e# (error e#))))
+
+(deftype Kernel [cid parent ctx cache] Component KernelAPI
+  (start [_]
+    (let [ root (:K_COMPS @ctx)
+           apps (comp-rego-find root (:rego/apps))
+           cs (comp-get-cache apps) ]
+      ;; need this to prevent deadlocks amongst pods
+      ;; when there are dependencies
+      ;; TODO: need to handle this better
+      (doseq [ [k v] (seq @cs) ]
+        (let [ r (-> (CU/new-random) (.nextLong 6)) ]
+          (maybe-start-pod apps v)
+          (PU/safe-wait (* 1000 (Math/max 1 r)))))))
+  (stop [this]
+    (let [ cs (comp-get-cache this) ]
+      (doseq [ [k v] (seq @cs) ]
+        (.stop v)))) )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmethod comp-get-id :default [c] (.cid c))
+(defmethod comp-get-version :default [c] "")
+(defmethod comp-parent :default [c] (.parent c))
 
 (defmethod comp-set-context :default [obj x]
   (dosync (ref-set (.ctx obj) x)))
@@ -77,11 +155,6 @@
   @(.ctx obj))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defmulti comp-compose (fn [c rego & more] (class a)))
-(defmulti comp-contextualize (fn [a b] (class a)))
-(defmulti comp-configure class)
-(defmulti comp-initialize class)
 
 (defmethod comp-compose :default [co rego & more] nil)
 
@@ -111,7 +184,7 @@
       (warn "deployer: cannot undeploy app: " app ", doesn't exist - no operation taken."))))
 
 
-(defmethod initialize Deployer [this]
+(defmethod comp-initialize Deployer [this]
   (let [ ctx (comp-get-context this)
          py (:K_PLAYDIR ctx)
          pd (:K_PODSDIR ctx)
@@ -132,7 +205,7 @@
       (when (instance? String (first more)) ;; JMXServer
         nil))))
 
-(defmethod comp-contextualize Kenel [this ctx]
+(defmethod comp-contextualize Kernel [this ctx]
   (let [ base (maybeDir ctx K_BASEDIR) ]
     (precondDir base)
     (precondDir (maybeDir ctx K_PODSDIR))
@@ -141,8 +214,17 @@
                       (.toURI)(.toURL )))
     (comp-set-context this ctx)))
 
+(deftype PODMeta [cid version podType src] )
+
+(defmethod comp-initialize PODMeta [this]
+  (let [ ctx (comp-get-context this)
+         rcl (get ctx K_ROOT_CZLR)
+         cl  (AppClassLoader. rcl) ]
+    (.configure cl { K_APPDIR (CU/nice-fpath (File. (.src this))) } )
+    (comp-set-context this (assoc ctx K_APP_CZLR cl))) )
+
 (defn- chkManifest [ctx app des mf]
-  (let [ apps (-> (comp-rego-cache (get ctx K_COMPS))
+  (let [ apps (-> (comp-get-cache (get ctx K_COMPS))
                   (get :rego/apps))
          ps (CU/load-javaprops mf)
          ver (.get ps "Implementation-Version")
@@ -185,12 +267,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defmulti comp-rego-contains? (fn [a b] (class a)))
-(defmulti comp-rego-find (fn [a b] (class a)))
-(defmulti comp-rego-remove (fn [a b] (class a)))
-(defmulti comp-rego-add (fn [a b] (class a)))
-(defmulti comp-get-cache class)
-
 (defmethod comp-get-cache :default [rego] (.cache rego))
 
 (defmethod comp-rego-contains? :default [rego cid]
@@ -218,57 +294,6 @@
       (dosync (ref-set cs (assoc @cs cid c))))) )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-(defprotocol Component  )
-
-(defprotocol Registry )
-(defprotocol Startable
-  (start [_] )
-  (stop [_] ))
-(defprotocol DeployerAPI )
-(defprotocol KernelAPI )
-
-(deftype ComponentRegistry [cname parent ctx cache] Registry Component )
-
-(deftype ServiceRegistry [cname parent ctx cache] Registry Component )
-
-(deftype AppRegistry [cname parent ctx cache] Registry Component )
-
-(deftype BlockRegistry [cname parent ctx cache] Registry Component )
-
-(deftype Deployer [cid parent ctx] DeployerAPI Component )
-
-(defn- make-container [c]
-  nil)
-
-(defn- maybe-start-pod [apps c]
-  (try
-    (let [ ctr (make-container c) ]
-      (if true ;;(.isEnabled ctr)
-        (do
-          (comp-rego-add apps (.cid c) ctr)
-        ;;_jmx.register(ctr,"", c.name)
-          )
-        (info "kernel: container " cid " is set off-line")) )
-    (catch Throwable e# (error e#))))
-
-(deftype Kernel [cid parent ctx cache] KernelAPI Component Startable
-  (start [_]
-    (let [ root (:K_COMPS @ctx)
-           apps (comp-rego-find root (:rego/apps))
-           cs (comp-get-cache apps) ]
-      ;; need this to prevent deadlocks amongst pods
-      ;; when there are dependencies
-      ;; TODO: need to handle this better
-      (doseq [ [k v] (seq @cs) ]
-        (let [ r (-> (CU/new-random) (.nextLong 6)) ]
-          (maybe-start-pod apps v)
-          (PU/safe-wait (* 1000 (Math/max 1 r)))))))
-  (stop [this]
-    (let [ cs (comp-get-cache this) ]
-      (doseq [ [k v] (seq @cs) ]
-        (.stop v)))) )
 
 (defn make-service-rego ^{ :doc "" }
   [cid parent]
@@ -308,19 +333,6 @@
   (comp-initialize c)
   c)
 
-(defprotocol ExecvisorAPI
-  (homeDir [_] )
-  (confDir [_] )
-  (podsDir [_] )
-  (playDir [_] )
-  (logDir [_] )
-  (tmpDir [_] )
-  (dbDir [_] )
-  (blocksDir [_] )
-  (getStartTime [_] )
-  (kill9 [_] )
-  (getUpTimeInMillis [_] ) )
-
 (deftype Execvisor [ctx] ExecvisorAPI
   (getStartTime [_] START-TIME)
   (getUpTimeInMillis [_]
@@ -336,18 +348,14 @@
   (kill9 [_]
     (let [ sh (get @ctx K_CLISH) ]
       (when-not (nil? sh) (.stop sh))))
-
-  Startable
   (start [_]
     (let [ root (get @ctx K_COMPS)
            k (comp-rego-find root K_KERNEL) ]
       (.start k)))
-
   (stop [_]
     (let [ root (get @ctx K_COMPS)
            k (comp-rego-find root K_KERNEL) ]
-      (.stop k)))
-  )
+      (.stop k))) )
 
 (defmethod comp-initialize Execvisor [this]
   (let [ ctx (comp-get-context this)
@@ -361,6 +369,7 @@
     (CU/test-nonil "conf file: registries" regs)
     (System/setProperty "file.encoding" "utf-8")
     (let [ ctx (comp-get-context this)
+           homeDir (:K_BASEDIR ctx)
            sb (doto (File. (homeDir this) DN_BOXX)
                   (.mkdir))
            bks (doto (File. (homeDir this) DN_BLOCKS)

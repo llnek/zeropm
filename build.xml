@@ -70,10 +70,14 @@
       <arg value="comzotohcljc.dbio.sqlops" />
       <arg value="comzotohcljc.dbio.simple" />
       <arg value="comzotohcljc.dbio.composite" />
-      <arg value="comzotohcljc.blason.etc.constants" />
+      <arg value="comzotohcljc.blason.core.constants" />
       <arg value="comzotohcljc.blason.core.climain" />
       <arg value="comzotohcljc.blason.etc.cmdline" />
       <arg value="comzotohcljc.blason.etc.core" />
+      <arg value="comzotohcljc.blason.impl.execvisor" />
+      <arg value="comzotohcljc.blason.impl.deployer" />
+      <arg value="comzotohcljc.blason.impl.kernel" />
+      <arg value="comzotohcljc.blason.impl.sysobjs" />
     </java>
   </target>
 

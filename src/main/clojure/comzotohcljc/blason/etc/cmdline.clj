@@ -36,6 +36,7 @@
 (require '[comzotohcljc.util.strutils :as SU])
 (require '[comzotohcljc.blason.core.climain :as CLI])
 
+(use '[comzotohcljc.blason.core.constants])
 (use '[comzotohcljc.util.cmdlineseq])
 
 
