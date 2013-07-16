@@ -49,7 +49,10 @@
 
 (defn nsb ^{ :doc "Returns empty string if obj is null, or obj.toString." }
   [obj]
-  (if (nil? obj) "" (.toString obj)))
+  (cond
+    (nil? obj) ""
+    (keyword? obj) (name obj)
+    :else (.toString obj)))
 
 (defn nsn ^{ :doc "Returns \"(null)\" if obj is null, or obj.toString." }
   [obj]

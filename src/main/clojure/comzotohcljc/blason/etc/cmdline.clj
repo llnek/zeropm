@@ -28,7 +28,7 @@
 (import '(com.zotoh.blason.etc CmdHelpError))
 (import '(org.apache.commons.io FileUtils))
 (import '(java.io File))
-(import '(com.zotoh.blason.core Constants))
+;;(import '(com.zotoh.blason.core ))
 ;;(import '(org.apache.tools.ant Main))
 
 (require '[comzotohcljc.util.coreutils :as CU])
@@ -49,7 +49,7 @@
 (defn- rcb [] *BLASON-RSBUNDLE*)
 
 (defn- getBuildFilePath []
-  (CU/nice-fpath (File. (File. (getHomeDir) (str (Constants/DN_CFG) "/app")) "ant.xml")))
+  (CU/nice-fpath (File. (File. (getHomeDir) (str DN_CFG "/app")) "ant.xml")))
 
 (defn- runTarget [target]
   (org.apache.tools.ant.Main/main  (into-array String
@@ -188,7 +188,7 @@
         (.append sep)))))
 
 (defn- genEclipseProj [app]
-  (let [ cwd (File. (getHomeDir) (str (Constants/DN_BOXX) "/" app))
+  (let [ cwd (File. (getHomeDir) (str DN_BOXX "/" app))
          ec (File. (CU/getcwd) "eclipse.projfiles")
          sb (StringBuilder.)
          lang "clojure"
@@ -203,10 +203,10 @@
           (StringUtils/replace "${TEST.SRC}"
                (CU/nice-fpath (File. cwd (str "src/test/" lang)))))
       "utf-8")
-    (scanJars (File. (getHomeDir) (Constants/DN_DIST)) sb)
-    (scanJars (File. (getHomeDir) (Constants/DN_LIB)) sb)
-    (scanJars (File. cwd (Constants/POD_CLASSES)) sb)
-    (scanJars (File. cwd (Constants/POD_LIB)) sb)
+    (scanJars (File. (getHomeDir) DN_DIST) sb)
+    (scanJars (File. (getHomeDir) DN_LIB) sb)
+    (scanJars (File. cwd POD_CLASSES) sb)
+    (scanJars (File. cwd POD_LIB) sb)
     (FileUtils/writeStringToFile (File. ec ".classpath")
       (-> (CU/rc-str (str "com/zotoh/blason/eclipse/" lang "/classpath.txt") "utf-8")
           (StringUtils/replace "${CLASS.PATH.ENTRIES}" (.toString sb)))
