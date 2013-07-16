@@ -42,6 +42,7 @@
 (use '[comzotohcljc.blason.impl.execvisor :only (ExecvisorAPI) ])
 (use '[comzotohcljc.blason.impl.deployer :only (DeployerAPI) ])
 (use '[comzotohcljc.blason.impl.kernel :only (KernelAPI) ])
+(use '[comzotohcljc.blason.kernel.container :only (ContainerAPI) ])
 
 (use '[comzotohcljc.blason.core.constants])
 
@@ -73,7 +74,7 @@
 
 (defmulti comp-compose (fn [a rego & more] (class a)))
 (defmulti comp-contextualize (fn [a b] (class a)))
-(defmulti comp-configure class)
+(defmulti comp-configure (fn [a b] (class a)))
 (defmulti comp-initialize class)
 
 (defmulti comp-rego-contains? (fn [a b] (class a)))
@@ -111,18 +112,56 @@
           (info "deployer: undeployed app: " app) )
         (warn "deployer: cannot undeploy app: " app ", doesn't exist - no operation taken.")))))
 
-(defn- make-container [c]
-  nil)
+(deftype Container [pod cache] Component ContainerAPI
+  (enabled? [_]
+    (let [ env (get @cache K_ENVCONF) ]
+      ))
 
-(defn- maybe-start-pod [apps c]
+)
+
+(defmethod comp-configure Container [this props]
+  (let [ appDir (File. (.get props K_APPDIR))
+         cfgDir (File. appDir DN_CONF)
+         cs (comp-get-cache this)
+         mf (CU/load-javaprops (File. appDir MN_FILE))
+         envConf (WI/parse-inifile (File. cfgDir "env.conf")) ;; TODO WRONG! JSON
+         appConf (WI/parse-inifile (File. cfgDir "app.conf")) ]
+    ;;WebPage.setup(new File(appDir))
+    ;;maybeLoadRoutes(cfgDir)
+    ;;_ftlCfg = new FTLCfg()
+    ;;_ftlCfg.setDirectoryForTemplateLoading( new File(_appDir, DN_PAGES+"/"+DN_TEMPLATES))
+    ;;_ftlCfg.setObjectWrapper(new DefaultObjectWrapper())
+    (dosync (ref-set cs (-> @cs
+                            (assoc K_ENVCONF envConf)
+                            (assoc K_APPCONF appConf)
+                            (assoc K_MFPROPS mf)) ))
+    (info "container: configured app: " (.cid (.pod this))) ))
+
+(defn- make-container [pod]
+  (let [ c (Container. pod (ref {}))
+         ctx (comp-get-context pod)
+         cl (K_APP_CZLR ctx)
+         ps (Properties.) ]
+    (.put ps K_APPDIR (File. (-> (.src pod) (.toURI))))
+    ;;(comp-compose c nil)
+    (comp-contextualize c ctx)
+    (comp-configure c ps)
+    (if (.enabled? c)
+      (do (PU/coroutine (fn []
+                          (do
+                            (comp-initialize c)
+                            (.start c))) cl) c)
+      nil)))
+
+(defn- maybe-start-pod [apps pod]
   (try
-    (let [ cid (.cid c) ctr (make-container c) ]
-      (if true ;;(.isEnabled ctr)
+    (let [ cid (.cid pod) ctr (make-container pod) ]
+      (if (not (nil? ctr))
         (do
           (comp-rego-add apps cid ctr)
         ;;_jmx.register(ctr,"", c.name)
           )
-        (info "kernel: container " cid " is set off-line")) )
+        (info "kernel: container " cid " disabled.")) )
     (catch Throwable e# (error e#))))
 
 (deftype Kernel [cid parent ctx cache] Component KernelAPI
@@ -164,25 +203,8 @@
 (defmethod comp-initialize :default [c]
   (do nil))
 
-(defmethod comp-configure :default [c]
+(defmethod comp-configure :default [c props]
   (do nil))
-
-(defn- deploy-pod [ctx src]
-  (let [ app (FilenameUtils/getBaseName (CU/nice-fpath src))
-         des (File. (:K_PLAYDIR ctx) app)
-         fp (File. (.toURI src)) ]
-    (if (not (.exists des))
-      (FU/unzip fp des)
-      (info "deployer: app: " app " has already been deployed."))))
-
-(defn- undeploy-pod [ctx app]
-  (let [ dir (File. (K_PLAYDIR ctx) app) ]
-    (if (.exists dir)
-      (do
-        (FileUtils/deleteDirectory dir)
-        (info "deployer: undeployed app: " app) )
-      (warn "deployer: cannot undeploy app: " app ", doesn't exist - no operation taken."))))
-
 
 (defmethod comp-initialize Deployer [this]
   (let [ ctx (comp-get-context this)
@@ -190,7 +212,7 @@
          pd (:K_PODSDIR ctx)
          fs (FileUtils/listFiles pd (into-array String ["pod"]) false) ]
     (doseq [f (seq fs)]
-      (deploy-pod ctx (-> f (.toURI)(.toURL))))))
+      (.deploy this (-> f (.toURI)(.toURL))))))
 
 (defmethod comp-contextualize Deployer [this ctx]
   (do
@@ -220,7 +242,7 @@
   (let [ ctx (comp-get-context this)
          rcl (get ctx K_ROOT_CZLR)
          cl  (AppClassLoader. rcl) ]
-    (.configure cl { K_APPDIR (CU/nice-fpath (File. (.src this))) } )
+    (.configure cl (CU/nice-fpath (File. (.src this))) )
     (comp-set-context this (assoc ctx K_APP_CZLR cl))) )
 
 (defn- chkManifest [ctx app des mf]
@@ -329,7 +351,7 @@
 (defn- tweak [svcreg ctx c]
   ;;(when-not (nil? svcreg) (.compose c svcreg )) ;; jmx?
   (comp-contextualize c ctx)
-  (comp-configure c)
+  ;;(comp-configure c)
   (comp-initialize c)
   c)
 

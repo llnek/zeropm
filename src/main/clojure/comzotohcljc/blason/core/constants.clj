@@ -115,7 +115,11 @@
 (def K_LOCALE :locale )
 (def K_L10N :l10n )
 (def K_LANG :lang )
+
 (def K_PIDFILE :pid-file )
+(def K_APPCONF :app-conf)
+(def K_ENVCONF :env-conf)
+(def K_MFPROPS :mf-props)
 
 (def K_META :meta )
 

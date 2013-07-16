@@ -31,19 +31,21 @@
 
 
 (defn async-exec ^{ :doc "Run the code (runnable) in a separate daemon thread." }
-  [runable]
-  (if (nil? runable)
-    nil
-    (doto (Thread. runable)
-      (.setContextClassLoader (MU/get-cldr))
-      (.setDaemon true)
-      (.start))) )
+  ([runable] (async-exec runable (MU/get-cldr)))
+  ([runable cl]
+    (if (nil? runable)
+      nil
+      (doto (Thread. runable)
+        (.setContextClassLoader cl)
+        (.setDaemon true)
+        (.start))) ))
 
 (defn coroutine ^{ :doc "Run this function asynchronously." }
-  [func]
-  (let [ r (reify Runnable
-             (run [_] (do (func)))) ]
-    (async-exec r)))
+  ([func] (coroutine func nil))
+  ([func cl]
+    (let [ r (reify Runnable
+               (run [_] (do (apply func)))) ]
+      (async-exec r cl))))
 
 (defn safe-wait ^{ :doc "Block current thread for some millisecs." }
   [millisecs]
