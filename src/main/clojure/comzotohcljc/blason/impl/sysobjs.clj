@@ -24,9 +24,11 @@
 
 (use '[clojure.tools.logging :only (info warn error debug)])
 
-(import '(com.zotoh.blason.core 
+(import '(com.zotoh.frwk.util CoreUtils))
+(import '(org.json JSONObject))
+(import '(com.zotoh.blason.core
   RegistryError ServiceError ConfigError AppClassLoader))
-(import '(java.util Date))
+(import '(java.util Properties Date))
 (import '(java.io File))
 (import '(org.apache.commons.io.filefilter DirectoryFileFilter))
 (import '(java.io FileFilter))
@@ -43,6 +45,7 @@
 (use '[comzotohcljc.blason.impl.deployer :only (DeployerAPI) ])
 (use '[comzotohcljc.blason.impl.kernel :only (KernelAPI) ])
 (use '[comzotohcljc.blason.kernel.container :only (ContainerAPI) ])
+(require '[comzotohcljc.blason.kernel.container :as CONTAINER ])
 
 (use '[comzotohcljc.blason.core.constants])
 
@@ -113,19 +116,79 @@
         (warn "deployer: cannot undeploy app: " app ", doesn't exist - no operation taken.")))))
 
 (deftype Container [pod cache] Component ContainerAPI
+
   (enabled? [_]
-    (let [ env (get @cache K_ENVCONF) ]
-      ))
+    (let [ env (get @cache K_ENVCONF)
+           c (.optJSONObject env "container") ]
+      (if (nil? c)
+        false
+        (.optBoolean c "enabled" true))))
+
+  (reifyServices [this]
+    (let [ env (get @cache K_ENVCONF)
+           s (.optJSONObject env "services") ]
+      (if (or (nil? s) (= (.length s) 0))
+          (warn "No system service \"depend\" found in env.conf.")
+          (doseq [ k (seq (.getKeys s)) ]
+            (CONTAINER/reifyOneService this k (.optJSONObject s k))))))
+
+  (reifyOneService [this k cfg]
+    (let [ svc (SU/nsb (.optString cfg "service" ""))
+           b (.optBoolean cfg "enabled" true) ]
+      (if (or (not b)(SU/nichts? svc))
+        (info "System service \"" svc "\" is disabled.")
+        (CONTAINER/reifyService this svc cfg))))
+
+        ;;_svcReg.add(key, rc._2 )
+  (reifyService [this svc cfg] nil)
 
 )
+
+(deftype Scheduler [])
+(deftype JobCreator [])
+
+
+(defmethod comp-initialize Container [this]
+  (let [ cache (comp-get-cache this)
+         env (get @cache K_ENVCONF)
+         app (get @cache K_APPCONF)
+         mf (get @cache K_MFPROPS)
+         mCZ (SU/nsb (.get mf "Main-Class"))
+         mObj (atom nil)
+         jc (JobCreator.)
+         sc (Scheduler.)
+         c (.optJSONObject env "container") ]
+    (CU/test-nestr "Main-Class" mCZ)
+    ;;(.compose jc r this)
+    ;;_svcReg.setParent( r.getParent.getOrElse(null) )
+    (let [ mainCZ (MU/load-class mCZ) ]
+      (try
+          (reset! mObj (MU/make-obj mainCZ))
+          (when-not (nil? @mObj)
+            (.contextualize @mObj this)
+            (.configure @mObj app)
+            (.initialize @mObj))
+        (catch Throwable e#
+          (warn "Main.Class: No ctor() found."e#))) )
+
+    (let [ svcs (.optJSONObject env "services") ]
+      (if (or (nil? svcs) (= (.length svcs) 0))
+          (warn "No system service \"depend\" found in env.conf.")
+          (.reifyServices this)))
+
+    (info "Composed app: {}" (.cid this))
+
+    (comp-configure sc (if (nil? c) (JSONObject.) c))
+    (.start sc)
+    (info "Initialized app: " (.cid this))))
 
 (defmethod comp-configure Container [this props]
   (let [ appDir (File. (.get props K_APPDIR))
          cfgDir (File. appDir DN_CONF)
          cs (comp-get-cache this)
          mf (CU/load-javaprops (File. appDir MN_FILE))
-         envConf (WI/parse-inifile (File. cfgDir "env.conf")) ;; TODO WRONG! JSON
-         appConf (WI/parse-inifile (File. cfgDir "app.conf")) ]
+         envConf (CoreUtils/readJson (File. cfgDir "env.conf"))
+         appConf (CoreUtils/readJson (File. cfgDir "app.conf")) ]
     ;;WebPage.setup(new File(appDir))
     ;;maybeLoadRoutes(cfgDir)
     ;;_ftlCfg = new FTLCfg()

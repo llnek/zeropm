@@ -7,6 +7,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defprotocol ContainerAPI
+  (reifyServices [_] )
+  (reifyOneService [_ sid cfg] )
+  (reifyService [_ svc cfg] )
   (enabled? [_] ))
 
 
