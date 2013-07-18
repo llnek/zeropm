@@ -31,8 +31,13 @@
 (require '[comzotohcljc.util.fileutils :as FU])
 (require '[comzotohcljc.i18n.i18nutils :as LN])
 (require '[comzotohcljc.util.win32ini :as WI])
+
 (use '[comzotohcljc.blason.core.constants])
-(import '(com.zotoh.blason.core ConfigError AppClassLoader RootClassLoader ExecClassLoader))
+(use '[comzotohcljc.blason.impl.defaults])
+(use '[comzotohcljc.blason.impl.execvisor :only (make-execvisor) ])
+
+(import '(com.zotoh.blason.core ConfigError 
+  AppClassLoader RootClassLoader ExecClassLoader))
 (import '(com.zotoh.blason.etc CmdHelpError))
 (import '(java.util Locale))
 (import '(java.io File))
@@ -42,11 +47,19 @@
 (def SHOW-STOPPER (agent 0))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- precondFile [f]
-  (CU/test-cond (str f " must allow read-access.") (FU/file-read? f)) )
+(defprotocol CLIMainAPI
+  (stop [_] ) )
 
-(defn- precondDir [d]
-  (CU/test-cond (str d " must allow read-write.") (FU/dir-readwrite? d)) )
+(deftype CLIMain [id version parent ctxHolder] Component CLIMainAPI
+
+  (stop [this]
+    (let [ exec (get @ctxHolder K_EXECV) ]
+      (.stop exec)))
+)
+
+(defn- make-climain []
+  (CLIMain. K_CLISH "1.0" nil (ref {})))
+
 
 (defn- inizContext [baseDir]
   (let [ cfg (File. baseDir DN_CFG)
@@ -55,9 +68,7 @@
     (precondDir home)
     (precondDir cfg)
     (precondFile f)
-    (-> {}
-      (assoc K_BASEDIR home)
-      (assoc K_CFGDIR cfg))) )
+    { K_BASEDIR home K_CFGDIR cfg } ))
 
 (defn- setupClassLoader [ctx]
   (let [ root (get ctx K_ROOT_CZLR)
@@ -82,13 +93,13 @@
          lg (.toLowerCase (.optString w K_LOCALE K_LANG "en"))
          cn (.toUpperCase (.optString w K_LOCALE K_COUNTRY ""))
          loc (if (SU/hgl? cn) (Locale. lg cn) (Locale. lg)) ]
-    (assoc ctx K_CLISH nil) ;;TODO
+    (assoc ctx K_CLISH (make-climain))
     (assoc ctx K_PROPS w)
     (assoc ctx K_L10N loc)))
 
 (defn- setupResources [ctx]
   (let [ rc (LN/get-resource "comzotohcljc.blason.etc.Resources" (get ctx K_LOCALE)) ]
-    (assoc ctx K_L10N) rc))
+    (assoc ctx K_RCBUNDLE rc)))
 
 (defn- pre-parse [args]
   (let [ bh (File. (first args))
@@ -96,7 +107,7 @@
     (precondDir (File. bh DN_PATCH))
     (precondDir (File. bh DN_CORE))
     (precondDir (File. bh DN_LIB))
-    (->  ctx
+    (-> ctx
       (maybeInizLoaders)
       (loadConf bh)
       (setupResources ))))
@@ -110,16 +121,15 @@
 
 (defn- primodial [ctx]
   (let [ cl (get ctx K_EXEC_CZLR)
+         cli (get ctx K_CLISH)
          wc (get ctx K_PROPS)
          cz (.optString wc K_COMPS K_EXECV "") ]
-    (CU/test-nestr "conf file:exec-visor" cz)
-    (let [ exec (MU/make-obj cz cl) ]
-      (when (nil? exec)
-        (throw (ConfigError. "Execvisor class undefined.")))
-      ;; order is important!
-      (.contextualize exec ctx)
-      (.initialize exec)
-      (assoc ctx K_EXECV exec))))
+    (CU/test-cond "conf file:exec-visor"
+                  (= cz "comzotohcljc.blason.impl.Execvisor"))
+    (let [ exec (make-execvisor cli)
+           rc (assoc ctx K_EXECV exec) ]
+      (synthesize-component exec { :ctx rc } )
+      rc)))
 
 (defn- enableRemoteShutdown []
   (let [ port (CU/conv-long (System/getProperty "blason.kill.port") 4444) ]
@@ -135,7 +145,9 @@
     (send SHOW-STOPPER inc)))
 
 (defn- hookShutdown [ctx]
-  (let [ rt (Runtime/getRuntime) ]
+  (let [ cli (get ctx K_CLISH)
+         rt (Runtime/getRuntime) ]
+    (comp-set-context cli ctx)
     (.addShutdownHook rt (Thread. (reify Runnable
                                     (run [_] (CU/TryC (stop-main ctx))))))
     (enableRemoteShutdown)

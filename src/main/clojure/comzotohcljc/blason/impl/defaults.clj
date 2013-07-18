@@ -23,42 +23,27 @@
   comzotohcljc.blason.impl.defaults )
 
 (use '[clojure.tools.logging :only (info warn error debug)])
-(require '[clojure.data.json :as JS])
 
 (import '(com.zotoh.frwk.util CoreUtils))
-(import '(org.json JSONObject))
 (import '(com.zotoh.blason.core
   RegistryError ServiceError ConfigError AppClassLoader))
-(import '(java.util Properties Date))
 (import '(java.io File))
-(import '(org.apache.commons.io.filefilter DirectoryFileFilter))
-(import '(java.io FileFilter))
-(import '(org.apache.commons.io FilenameUtils FileUtils))
 
 (require '[ comzotohcljc.util.coreutils :as CU ] )
 (require '[ comzotohcljc.util.strutils :as SU ] )
 (require '[ comzotohcljc.util.fileutils :as FU ] )
-(require '[ comzotohcljc.util.metautils :as MU ] )
-(require '[ comzotohcljc.util.mimeutils :as MI ] )
-(require '[ comzotohcljc.util.procutils :as PU ] )
 
-(use '[comzotohcljc.blason.impl.execvisor :only (ExecvisorAPI) ])
-(use '[comzotohcljc.blason.impl.deployer :only (DeployerAPI) ])
-(use '[comzotohcljc.blason.impl.kernel :only (KernelAPI) ])
-(use '[comzotohcljc.blason.kernel.container :only (ContainerAPI) ])
-
-(require '[comzotohcljc.blason.kernel.container :as CONTAINER ])
 (use '[comzotohcljc.blason.core.constants])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- precondDir [d]
+(defn precondDir [d]
   (CU/test-cond (str "Directory " d " must be read-writable.") (FU/dir-readwrite? d)))
 
-(defn- precondFile [f]
+(defn precondFile [f]
   (CU/test-cond (str "File " f " must be readable.") (FU/file-read? f)))
 
-(defn- maybeDir [m kn]
+(defn maybeDir [m kn]
   (let [ v (get m kn) ]
     (cond
       (instance? String v) (File. v)
@@ -67,473 +52,93 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defmulti comp-get-version class)
-(defmulti comp-get-id class)
-(defmulti comp-parent class)
-
 (defmulti comp-set-context (fn [a b] (class a)))
 (defmulti comp-get-context class)
+
+(defmulti comp-set-cache (fn [a b] (class a)))
+(defmulti comp-get-cache class)
 
 (defmulti comp-compose (fn [a rego] (class a)))
 (defmulti comp-contextualize (fn [a b] (class a)))
 (defmulti comp-configure (fn [a b] (class a)))
 (defmulti comp-initialize class)
 
-(defmulti comp-rego-contains? (fn [a b] (class a)))
-(defmulti comp-rego-find (fn [a b] (class a)))
-(defmulti comp-rego-remove (fn [a b] (class a)))
-(defmulti comp-rego-add (fn [a b] (class a)))
-(defmulti comp-get-cache class)
-
-(defn- synthesize-component [c options]
+(defn synthesize-component [c options]
   (let [ rego (:rego options)
          ctx (:ctx options)
          props (:props options) ]
    (when-not (nil? rego) (comp-compose c rego))
    (when-not (nil? ctx) (comp-contextualize c ctx))
    (when-not (nil? props) (comp-configure c props))
-   (comp-initialize c)) )
+   (comp-initialize c)
+   c) )
 
 (defprotocol Component
   (version [_] )
-  (cid [_] ))
+  (parent [_] )
+  (id [_] ))
 
 (defprotocol Registry
   (lookup [_ cid] )
   (has? [_ cid] )
-  (add [_ c] )
-  (deregister [_ c] ))
+  (reg [_ c] )
+  (dereg [_ c] ))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(deftype ComponentRegistry [cname ver parent ctx cache]
+(deftype ComponentRegistry [id version parent ctxHolder cacheHolder]
   Component
-  (version [_] ver)
-  (cid [_] cname)
+
   Registry
+
   (has? [_ cid]
-    (let [ c (get @cache cid) ]
+    (let [ c (get @cacheHolder cid) ]
       (if (nil? c) false true)) )
+
   (lookup [_ cid]
-    (let [ c (get @cache cid) ]
-      (if (and (nil? c) (not (nil? parent)))
+    (let [ c (get @cacheHolder cid) ]
+      (if (and (nil? c) (isa? ComponentRegistry parent))
         (.lookup parent cid)
         nil)) )
-  (deregister [this c]
-    (let [ cid (.cid c) ]
+
+  (dereg [this c]
+    (let [ cid (.id c) ]
       (when (has? this cid)
-        (dosync (ref-set cache (dissoc @cache cid))))) )
-  (add [_ c]
+        (comp-set-cache this (dissoc @cacheHolder cid)))))
+
+  (reg [this c]
     (when-not (nil? c)
-      (let [ cid (.cid c) ]
+      (let [ cid (.id c) ]
         (when (has? this cid)
           (throw (RegistryError. (str "Component \"" cid "\" already exists" ))))
-        (dosync (ref-set cache (assoc @cache cid c))))) )
-  )
-
-(deftype Deployer [cid parent ctx] Component DeployerAPI
-  (deploy [this src]
-    (let [ app (FilenameUtils/getBaseName (CU/nice-fpath src))
-           ctx (comp-get-context this)
-           des (File. (:K_PLAYDIR ctx) app)
-           fp (File. (.toURI src)) ]
-      (if (not (.exists des))
-        (FU/unzip fp des)
-        (info "deployer: app: " app " has already been deployed."))))
-  (undeploy [this app]
-    (let [ ctx (comp-get-context this) dir (File. (K_PLAYDIR ctx) app) ]
-      (if (.exists dir)
-        (do
-          (FileUtils/deleteDirectory dir)
-          (info "deployer: undeployed app: " app) )
-        (warn "deployer: cannot undeploy app: " app ", doesn't exist - no operation taken.")))))
-
-(deftype Container [pod cache] Component ContainerAPI
-
-  (enabled? [_]
-    (let [ env (get @cache K_ENVCONF)
-           c (.optJSONObject env "container") ]
-      (if (nil? c)
-        false
-        (.optBoolean c "enabled" true))))
-
-  (reifyServices [this]
-    (let [ env (get @cache K_ENVCONF)
-           s (.optJSONObject env "services") ]
-      (if (or (nil? s) (= (.length s) 0))
-          (warn "No system service \"depend\" found in env.conf.")
-          (doseq [ k (seq (.getKeys s)) ]
-            (CONTAINER/reifyOneService this k (.optJSONObject s k))))))
-
-  (reifyOneService [this k cfg]
-    (let [ svc (SU/nsb (.optString cfg "service" ""))
-           b (.optBoolean cfg "enabled" true) ]
-      (if (or (not b)(SU/nichts? svc))
-        (info "System service \"" svc "\" is disabled.")
-        (CONTAINER/reifyService this svc cfg))))
-
-        ;;_svcReg.add(key, rc._2 )
-  (reifyService [this svc cfg] nil)
-
+        (comp-set-cache this (assoc @cacheHolder cid c)))))
 )
 
-(deftype Scheduler [])
-(deftype JobCreator [])
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defmethod comp-get-context :default [co] @(.ctxHolder co))
 
-(defmethod comp-initialize Container [this]
-  (let [ cache (comp-get-cache this)
-         env (get @cache K_ENVCONF)
-         app (get @cache K_APPCONF)
-         mf (get @cache K_MFPROPS)
-         mCZ (SU/nsb (.get mf "Main-Class"))
-         mObj (atom nil)
-         jc (JobCreator.)
-         sc (Scheduler.)
-         c (.optJSONObject env "container") ]
-    (CU/test-nestr "Main-Class" mCZ)
-    ;;(.compose jc r this)
-    ;;_svcReg.setParent( r.getParent.getOrElse(null) )
-    (let [ mainCZ (MU/load-class mCZ) ]
-      (try
-          (reset! mObj (MU/make-obj mainCZ))
-          (when-not (nil? @mObj)
-            (.contextualize @mObj this)
-            (.configure @mObj app)
-            (.initialize @mObj))
-        (catch Throwable e#
-          (warn "Main.Class: No ctor() found."e#))) )
+(defmethod comp-set-context :default [co x]
+  (dosync (ref-set (.ctxHolder co) x)))
 
-    (let [ svcs (.optJSONObject env "services") ]
-      (if (or (nil? svcs) (= (.length svcs) 0))
-          (warn "No system service \"depend\" found in env.conf.")
-          (.reifyServices this)))
+(defmethod comp-get-cache :default [co] @(.cacheHolder co))
 
-    (info "Composed app: {}" (.cid this))
-
-    (comp-configure sc (if (nil? c) (JSONObject.) c))
-    (.start sc)
-    (info "Initialized app: " (.cid this))))
-
-(defmethod comp-configure Container [this props]
-  (let [ appDir (File. (.get props K_APPDIR))
-         cfgDir (File. appDir DN_CONF)
-         cs (comp-get-cache this)
-         mf (CU/load-javaprops (File. appDir MN_FILE))
-         envConf (CoreUtils/readJson (File. cfgDir "env.conf"))
-         appConf (CoreUtils/readJson (File. cfgDir "app.conf")) ]
-    ;;WebPage.setup(new File(appDir))
-    ;;maybeLoadRoutes(cfgDir)
-    ;;_ftlCfg = new FTLCfg()
-    ;;_ftlCfg.setDirectoryForTemplateLoading( new File(_appDir, DN_PAGES+"/"+DN_TEMPLATES))
-    ;;_ftlCfg.setObjectWrapper(new DefaultObjectWrapper())
-    (dosync (ref-set cs (-> @cs
-                            (assoc K_ENVCONF envConf)
-                            (assoc K_APPCONF appConf)
-                            (assoc K_MFPROPS mf)) ))
-    (info "container: configured app: " (.cid (.pod this))) ))
-
-(defn- make-container [pod]
-  (let [ c (Container. pod (ref {}))
-         ctx (comp-get-context pod)
-         cl (K_APP_CZLR ctx)
-         ps (Properties.) ]
-    (.put ps K_APPDIR (File. (-> (.src pod) (.toURI))))
-    ;;(comp-compose c nil)
-    (comp-contextualize c ctx)
-    (comp-configure c ps)
-    (if (.enabled? c)
-      (do (PU/coroutine (fn []
-                          (do
-                            (comp-initialize c)
-                            (.start c))) cl) c)
-      nil)))
-
-(defn- maybe-start-pod [apps pod]
-  (try
-    (let [ cid (.cid pod) ctr (make-container pod) ]
-      (if (not (nil? ctr))
-        (do
-          (comp-rego-add apps cid ctr)
-        ;;_jmx.register(ctr,"", c.name)
-          )
-        (info "kernel: container " cid " disabled.")) )
-    (catch Throwable e# (error e#))))
-
-(deftype Kernel [cid parent ctx cache] Component KernelAPI
-  (start [_]
-    (let [ root (:K_COMPS @ctx)
-           apps (comp-rego-find root (:rego/apps))
-           cs (comp-get-cache apps) ]
-      ;; need this to prevent deadlocks amongst pods
-      ;; when there are dependencies
-      ;; TODO: need to handle this better
-      (doseq [ [k v] (seq @cs) ]
-        (let [ r (-> (CU/new-random) (.nextLong 6)) ]
-          (maybe-start-pod apps v)
-          (PU/safe-wait (* 1000 (Math/max 1 r)))))))
-  (stop [this]
-    (let [ cs (comp-get-cache this) ]
-      (doseq [ [k v] (seq @cs) ]
-        (.stop v)))) )
+(defmethod comp-set-cache :default [co x]
+  (dosync (ref-set (.cacheHolder co) x)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defmethod comp-get-id :default [c] (.cid c))
-(defmethod comp-get-version :default [c] "")
-(defmethod comp-parent :default [c] (.parent c))
+(defmethod comp-compose :default [co rego] co)
 
-(defmethod comp-set-context :default [obj x]
-  (dosync (ref-set (.ctx obj) x)))
+(defmethod comp-contextualize :default [co ctx]
+  (do (comp-set-context co ctx) co))
 
-(defmethod comp-get-context :default [obj]
-  @(.ctx obj))
+(defmethod comp-configure :default [co props] co)
+(defmethod comp-initialize :default [co] co)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defmethod comp-compose :default [co rego & more] nil)
-
-(defmethod comp-contextualize :default [c ctx]
-  (comp-set-context c ctx))
-
-(defmethod comp-initialize :default [c]
-  (do nil))
-
-(defmethod comp-configure :default [c props]
-  (do nil))
-
-(defmethod comp-initialize Deployer [this]
-  (let [ ctx (comp-get-context this)
-         py (:K_PLAYDIR ctx)
-         pd (:K_PODSDIR ctx)
-         fs (FileUtils/listFiles pd (into-array String ["pod"]) false) ]
-    (doseq [f (seq fs)]
-      (.deploy this (-> f (.toURI)(.toURL))))))
-
-(defmethod comp-contextualize Deployer [this ctx]
-  (do
-    (precondDir (maybeDir ctx K_BASEDIR))
-    (precondDir (maybeDir ctx K_PODSDIR))
-    (precondDir (maybeDir ctx K_PLAYDIR))
-    (comp-set-context this ctx)))
-
-(defmethod comp-compose Kernel [this rego & more ]
-  (do
-    (when-not (empty? more)
-      (when (instance? String (first more)) ;; JMXServer
-        nil))))
-
-(defmethod comp-contextualize Kernel [this ctx]
-  (let [ base (maybeDir ctx K_BASEDIR) ]
-    (precondDir base)
-    (precondDir (maybeDir ctx K_PODSDIR))
-    (precondDir (maybeDir ctx K_PLAYDIR))
-    (MI/setup-cache (-> (File. base (str DN_CFG "/app/mime.properties"))
-                      (.toURI)(.toURL )))
-    (comp-set-context this ctx)))
-
-(deftype PODMeta [cid version podType src] )
-
-(defmethod comp-initialize PODMeta [this]
-  (let [ ctx (comp-get-context this)
-         rcl (get ctx K_ROOT_CZLR)
-         cl  (AppClassLoader. rcl) ]
-    (.configure cl (CU/nice-fpath (File. (.src this))) )
-    (comp-set-context this (assoc ctx K_APP_CZLR cl))) )
-
-(defn- chkManifest [ctx app des mf]
-  (let [ apps (-> (comp-get-cache (get ctx K_COMPS))
-                  (get :rego/apps))
-         ps (CU/load-javaprops mf)
-         ver (.get ps "Implementation-Version")
-         cz (.get ps "Main-Class") ]
-
-    (CU/test-nestr "POD-MainClass" cz)
-    (CU/test-nestr "POD-Version" ver)
-
-    ;;ps.gets("Manifest-Version")
-    ;;.gets("Implementation-Title")
-    ;;.gets("Implementation-Vendor-URL")
-    ;;.gets("Implementation-Vendor")
-    ;;.gets("Implementation-Vendor-Id")
-
-    (comp-rego-add apps (keyword app)
-      (doto (PODMeta. app ver cz (-> des (.toURI) (.toURL)))
-        (comp-contextualize ctx)
-        (comp-initialize)) )))
 
 
-(defn- inspect-pod [ctx des]
-  (let [ appid (FilenameUtils/getBaseName  (CU/nice-fpath des))
-         mf (File. des MN_FILE) ]
-    (precondDir (File. des POD_INF))
-    (precondDir (File. des POD_CLASSES))
-    (precondDir (File. des POD_LIB))
-    (precondDir (File. des META_INF))
-    (precondFile (File. des CFG_APP_CF))
-    (precondFile (File. des CFG_ENV_CF))
-    (precondDir (File. des DN_CONF))
-    (precondFile mf)
-    (chkManifest ctx appid des mf)) )
-
-(defmethod comp-initialize Kernel [this]
-  (let [ ctx (comp-get-context this)
-         fs (-> (get ctx K_PLAYDIR)
-                (.listFiles (cast FileFilter DirectoryFileFilter/DIRECTORY))) ]
-    (doseq [ f (seq fs) ]
-      (inspect-pod ctx f)) ))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defmethod comp-get-cache :default [rego] (.cache rego))
-
-(defmethod comp-rego-contains? :default [rego cid]
-  (let [ cs (comp-get-cache rego)
-         c (get @cs cid) ]
-    (if (nil? c) false true)) )
-
-(defmethod comp-rego-find :default [rego cid]
-  (let [ cs (comp-get-cache rego)
-         par (comp-parent rego)
-         c (get @cs cid) ]
-    (if (and (nil? c) (not (nil? par))) (comp-rego-find par cid) nil)) )
-
-(defmethod comp-rego-remove :default [rego c]
-  (let [ cs (comp-get-cache rego)
-         cid (comp-get-id c) ]
-    (when (comp-rego-contains? rego cid)
-      (dosync (ref-set cs (dissoc @cs cid))))) )
-
-(defmethod comp-rego-add :default [rego c]
-  (when-not (nil? c)
-    (let [ cid (comp-get-id c) cs (comp-get-cache rego) ]
-      (when (comp-rego-contains? rego cid)
-        (throw (RegistryError. (str "Component \"" cid "\" already exists" ))))
-      (dosync (ref-set cs (assoc @cs cid c))))) )
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defn make-service-rego ^{ :doc "" }
-  [cid parent]
-  (ServiceRegistry. cid  parent (ref {}) (ref {})))
-
-(defn make-comp-rego ^{ :doc "" }
-  [cid parent]
-  (ComponentRegistry. cid parent (ref {}) (ref {})))
-
-(defn make-app-rego ^{ :doc "" }
-  [cid parent]
-  (AppRegistry. cid parent (ref {}) (ref {})))
-
-(defn make-block-rego ^{ :doc "" }
-  [cid parent]
-  (BlockRegistry. cid parent (ref {}) (ref {})))
-
-(defn make-deployer ^{ :doc "" }
-  [cid parent]
-  (Deployer. cid parent (ref {}) ))
-
-(defn make-kernel ^{ :doc "" }
-  [cid parent]
-  (Kernel. cid parent (ref {}) (ref {})))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(def ^:private START-TIME (.getTime (Date.)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defn- tweak [svcreg ctx c]
-  ;;(when-not (nil? svcreg) (.compose c svcreg )) ;; jmx?
-  (comp-contextualize c ctx)
-  ;;(comp-configure c)
-  (comp-initialize c)
-  c)
-
-(deftype Execvisor [ctx] ExecvisorAPI
-  (getStartTime [_] START-TIME)
-  (getUpTimeInMillis [_]
-    (- (System/currentTimeMillis) START-TIME))
-  (homeDir [_] (maybeDir ctx K_BASEDIR))
-  (confDir [_] (maybeDir ctx K_CFGDIR))
-  (podsDir [_] (maybeDir ctx K_PODSDIR))
-  (playDir [_] (maybeDir ctx K_PLAYDIR))
-  (logDir [_] (maybeDir ctx K_LOGDIR))
-  (tmpDir [_] (maybeDir ctx K_TMPDIR))
-  (dbDir [_] (maybeDir ctx K_DBSDIR))
-  (blocksDir [_] (maybeDir ctx K_BKSDIR))
-  (kill9 [_]
-    (let [ sh (get @ctx K_CLISH) ]
-      (when-not (nil? sh) (.stop sh))))
-  (start [_]
-    (let [ root (get @ctx K_COMPS)
-           k (comp-rego-find root K_KERNEL) ]
-      (.start k)))
-  (stop [_]
-    (let [ root (get @ctx K_COMPS)
-           k (comp-rego-find root K_KERNEL) ]
-      (.stop k))) )
-
-(defmethod comp-initialize Execvisor [this]
-  (let [ ctx (comp-get-context this)
-         cf (get ctx K_PROPS)
-         comps (.getSectionAsMap cf K_COMPS)
-         regs (.getSectionAsMap cf K_REGS)
-         jmx  (.getSectionAsMap cf K_JMXMGM) ]
-    (comp-set-context this (assoc ctx K_EXECV this))
-    (CU/test-nonil "conf file: components" comps)
-    (CU/test-nonil "conf file: jmx mgmt" jmx)
-    (CU/test-nonil "conf file: registries" regs)
-    (System/setProperty "file.encoding" "utf-8")
-    (let [ ctx (comp-get-context this)
-           homeDir (:K_BASEDIR ctx)
-           sb (doto (File. (homeDir this) DN_BOXX)
-                  (.mkdir))
-           bks (doto (File. (homeDir this) DN_BLOCKS)
-                  (.mkdir))
-           tmp (doto (File. (homeDir this) DN_TMP)
-                  (.mkdir))
-           db (doto (File. (homeDir this) DN_DBS)
-                  (.mkdir))
-           log (doto (File. (homeDir this) DN_LOGS)
-                  (.mkdir))
-           pods (doto (File. (homeDir this) DN_PODS)
-                  (.mkdir)) ]
-      (precondDir pods)
-      (precondDir sb)
-      (precondDir log)
-      (precondDir tmp)
-      (precondDir db)
-      (precondDir bks)
-      (comp-set-context this (-> ctx
-          (assoc K_PODSDIR pods)
-          (assoc K_PLAYDIR sb)
-          (assoc K_LOGDIR log)
-          (assoc K_DBSDIR db)
-          (assoc K_TMPDIR tmp)
-          (assoc K_BKSDIR bks)) ))
-    ;;(start-jmx)
-    (let [ root (make-comp-rego "rego/root" nil)
-           ctx (comp-get-context this) ]
-
-      (tweak nil ctx root)
-
-      (comp-rego-add root
-        (tweak root ctx (make-block-rego :rego/blocks nil)) )
-
-      (comp-rego-add root
-        (tweak root ctx (make-app-rego :rego/apps nil)) )
-
-      (comp-rego-add root
-        (tweak root ctx (make-deployer :co/deployer nil)) )
-
-      (comp-rego-add root
-        (tweak root ctx (make-kernel :co/kernel nil)) )
-
-      (comp-set-context this (assoc ctx K_COMPS root)) )
-  ))
-
-
-(def ^:private impls-eof nil)
+(def ^:private defaults-eof nil)
 

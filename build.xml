@@ -74,11 +74,11 @@
       <arg value="comzotohcljc.blason.core.climain" />
       <arg value="comzotohcljc.blason.etc.cmdline" />
       <arg value="comzotohcljc.blason.etc.core" />
-      <arg value="comzotohcljc.blason.impl.execvisor" />
+      <arg value="comzotohcljc.blason.impl.defaults" />
       <arg value="comzotohcljc.blason.impl.deployer" />
+      <arg value="comzotohcljc.blason.impl.container" />
       <arg value="comzotohcljc.blason.impl.kernel" />
-      <arg value="comzotohcljc.blason.kernel.container" />
-      <arg value="comzotohcljc.blason.impl.sysobjs" />
+      <arg value="comzotohcljc.blason.impl.execvisor" />
     </java>
   </target>
 

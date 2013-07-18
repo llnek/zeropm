@@ -30,7 +30,7 @@
 (require '[ comzotohcljc.util.fileutils :as FU])
 (require '[ comzotohcljc.util.strutils :as SU])
 
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defprotocol ^{ :doc "A Windows INI file object." }
   IWin32Conf
@@ -81,22 +81,25 @@
         (recur (evalOneLine rdr total line curSec) (.readLine rdr) )))) ))
 
 (defn- hasKV [m k]
-  (if (or (nil? k) (nil? m)) nil (.containsKey m k)) )
+  (let [ kn (name k) ]
+    (if (or (nil? kn) (nil? m)) nil (.containsKey m kn)) ))
 
 (defn- getKV [cf s k err]
-  (let [ mp (.getSectionAsMap cf s) ]
+  (let [ kn (name k) sn (name s) mp (.getSectionAsMap cf sn) ]
     (cond
-      (nil? mp) (if err (throwBadMap s) nil)
-      (nil? k) (if err (throwBadKey k) nil)
-      (not (hasKV mp k)) (if err (throwBadKey k) nil)
-      :else (.get mp k))))
+      (nil? mp) (if err (throwBadMap sn) nil)
+      (nil? k) (if err (throwBadKey "") nil)
+      (not (hasKV mp k)) (if err (throwBadKey kn) nil)
+      :else (.get mp kn))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (deftype Win32Conf [mapOfSections] IWin32Conf
 
   (getSectionAsMap [this sectionName]
     (if (nil? sectionName)
       nil
-      (let [ m (.get mapOfSections sectionName) ]
+      (let [ m (.get mapOfSections (name sectionName)) ]
         (if (nil? m) nil (into {} m)))))
 
   (sectionKeys [this] (.keySet mapOfSections))
@@ -139,14 +142,15 @@
     (let [ buf (StringBuilder.) ]
       (doseq [ [k v] (seq mapOfSections) ]
         (do
-          (.append buf (str "[" k "]\n"))
+          (.append buf (str "[" (name k) "]\n"))
           (doseq [ [x y] (seq v) ]
-            (.append buf (str x "=" y)))
+            (.append buf (str (name x) "=" y)))
           (.append buf "\n")))
       (println buf)))
 )
 
-(defmulti ^{ :doc "Parse a INI config file, returning a Win32Conf object." } parse-inifile class)
+(defmulti ^{ :doc "Parse a INI config file, returning a Win32Conf object." }
+  parse-inifile class)
 
 (defmethod parse-inifile String
   [^String fpath]
