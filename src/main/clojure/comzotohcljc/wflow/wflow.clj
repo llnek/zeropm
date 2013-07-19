@@ -4,19 +4,51 @@
 
 (require '[comzotohcljc.util.seqnumgen :SN])
 
+
+(defprotocol FlowStepInnardsAPI
+  (set-next [_ n] )
+  (get-next [_] )
+  (put [_ x] )
+  (shift [_] ))
+(deftype FlowStepInnards [ template typeid
+                          ^:unsynchronized-mutable nextguy
+                          ^:unsynchronized-mutable attmt ]
+  FlowStepInnardsAPI
+  (set-next [_ n] (set! nextguy n))
+  (get-next [_] nextguy)
+  (put [_ x] (set! attmt x))
+  (shift [_]
+    (let [ t attmt ]
+      (set! attmt nil)
+      t)))
+
+(defprotocol FlowStep
+  (setNextPtr [_ n] )
+  (nextPtr [_] )
+  (pipeline [_] )
+  (pid [_] )
+  (template [_] )
+  (typeid [_] )
+  (popAttmt [_] )
+  (putAttmt [_ x] ))
+
 (defmacro activity [proto pid]
   `(let []
     (with-meta (reify
       Activity
       ~proto) { :typeid ~pid } )) )
 
-(defmacro flowstep [pipe proto]
-  `(let [pid# (SN/next-long) ]
+(defmacro flowstep [pipe proto act typeid]
+  `(let [pid# (SN/next-long) impl# (FlowStepInnards. ~act ~typeid nil nil) ]
     (reify
       FlowStep
-      (nextPtr [me#] me#)
-      (pipeline [me#] ~pipe)
-      (id [me#] pid#)
+      (setNextPtr [_ n#] (.set-next impl#))
+      (nextPtr [_] (.get-next impl#))
+      (pipeline [_] ~pipe)
+      (pid [_] pid#)
+      (template [_] (.template impl#)) 
+      (popAttmt [_] (.shift impl#))
+      (putAttmt [_ a#] (.put impl# a#))
       ~proto
       Runnable
       (run [me#]
@@ -25,11 +57,15 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;(deftype FlowStep [^Pipeline pipeline ^FlowStep nextPtr ^Activity template ^Any closure ^long pid ] )
-(defn meta-flowstep [fw id a]
-  (with-meta fw { :typeid id :activity a :closure nil } ))
+(defn meta-flowstep 
+  ([fw id a] (meta-flowstep fw id a {}))
+  ([fw id a extra]
+    (with-meta fw (merge { :typeid id } extra)) ))
 
-(defn make-activity []
-  { :typeid :activity } )
+(defn meta-activity 
+  ([a id ] (meta-activity a id {}))
+  ([a id extra]
+    (with-meta a (merge { :typeid id } extra) )))
 
 ;; returns FlowStep
 (defmulti fw-evalulate (fn [a job] (:typeid a)))

@@ -6,6 +6,7 @@
 (defprotocol NihilStep)
 (defprotocol Nihil)
 
+(comment
 (defn make-nihilstep [pipe]
   (let [pid (SN/next-long) ]
     (reify
@@ -17,9 +18,9 @@
       Runnable
       (run [this]
         (fw-run pipe this)))) )
-
 (defn make-nihil []
   (with-meta (reify Activity Nihil) { :typeid :Nihil } ))
+)
 
 (defn reifyZero [pipe]
   (let [ f (flowstep pipe NihilStep)
