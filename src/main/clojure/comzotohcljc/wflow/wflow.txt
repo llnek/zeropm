@@ -1,0 +1,126 @@
+
+(ns ^{ :doc ""
+       :author "kenl" }
+  comzotohcljc.wflow )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defprotocol IterWrapperAPI
+  (isEmpty [_] )
+  (size [_] )
+  (getNext [_] ))
+
+(defprotocol Activity)
+(defprotocol FlowStep)
+(defprotocol Composite
+  (children [_] )
+  (add [_ a] ))
+
+(defmulti reify-inner-steps (fn [a b] (satisfies? Composite a)))
+
+
+
+(defprotocol Join
+  (withBody [_ b] )
+  (withBranches [_ n] ))
+
+
+(deftype And [body branches] Activity Join
+  (reeify [this cur] (reifyAndJoin cur this))
+  (realize [_ cur]
+    (do
+      (when-not (nil? @body)
+        (withBody cur (.reeify @body (.nextStep cur))))
+      (.withBranches cur @branches)))
+  (withBranches [_ n] (reset! branches n))
+  (withBody [_ b] (reset! body b)) )
+
+(deftype Group [cache] Activity Composite
+  (children [_] @cache)
+  (add [this & more]
+    (doseq [ a (seq more) ]
+      (reset! cache (conj @cache a)))) )
+
+(deftype IterWrapper [outer cache] IterWrapperAPI
+  (getNext [_]
+    (if (empty? @cache)
+      nil
+      (let [ a (first @cache) ]
+        (reset! cache (pop @cache))
+        (reify-activity a outer))))
+  (isEmpty [_] (empty? @cache))
+  (size [_] (count @cache)) )
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmethod reify-inner-steps false [composite outer] )
+(defmethod reify-inner-steps true [composite outer]
+  ;; need to do a reverse as vec -> list internally does a reverse
+  ;; that is (- -) => +
+  (let [ c (.children composite)
+         a (into () (reverse c)) ]
+    (IterWrapper. outer (atom a))))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn- reifyZero [pipe] (NihilStep. pipe))
+
+(defn- reifyAsyncWait [cur a]
+  (reify-flowstep (AsyncWaitStep. cur a)))
+
+(defn- reifyDelay [cur a]
+  (reify-flowstep (DelayStep. cur a)))
+
+(defn- reifyPTask [cur a]
+  (reify-flowstep (PTaskStep. cur a)))
+
+(defn- reifySwitch [cur a]
+  (reify-flowstep (SwitchStep. cur a)))
+
+(defn- reifyIf [cur a]
+  (reify-flowstep (IfStep. cur a)))
+
+(defn- reifyGroup [cur a]
+  (reify-flowstep (GroupStep. cur a)))
+
+(defn- reifySplit [cur a]
+  (reify-flowstep (SplitStep. cur a)))
+
+(defn- reifyOrJoin [cur a]
+  (reify-flowstep (OrStep. cur a)))
+
+(defn- reifyNullJoin [cur a]
+  (reify-flowstep (NullJoinStep. cur a)))
+
+(defn- reifyAndJoin [cur a]
+  (reify-flowstep (AndStep. cur a)))
+
+(defn- reifyWhile [cur a]
+  (reify-flowstep (WhileStep. cur a)))
+
+(defn- reifyFor [cur a]
+  (reify-flowstep (ForStep. cur a)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmethod chain Composite [act1 act2]
+  (Group. act1 act2))
+
+
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+
+
+(def ^:private wflow-eof nil)
+
