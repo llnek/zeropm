@@ -43,6 +43,11 @@
 (defprotocol FlowPoint)
 (defprotocol Activity)
 
+(defprotocol NihilPoint)
+(defprotocol Nihil)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defmacro make-Activity [ & args ]
   `(let [ impl# (CU/make-mmap) ]
     (reify
@@ -83,7 +88,25 @@
     fw))
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Nihil
 
+(defn make-nihil []
+  (let [ b (make-Activity Nihil) ]
+    b))
+
+(defmethod ac-reify :Nihil [ac cur]
+  (let [ pipe (get (meta cur) :pipeline)
+         f (make-FlowPoint pipe NihilPoint) ]
+    (fw-configure! f ac cur)
+    (fw-realize! f)))
+
+(defmethod ac-realize! :Nihil [ac fw]
+  (do
+    (.setf fw :next fw)
+    fw))
+
+(defmethod fw-evaluate! :NihilPoint [fw job] fw)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

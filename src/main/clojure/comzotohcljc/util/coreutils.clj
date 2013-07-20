@@ -415,10 +415,10 @@
   (mm-s [_ k v]))
 (deftype MutableMap [ ^:unsynchronized-mutable data ] MutableMapAPI
   (mm-r [_ k]
-    (var-set data (dissoc @data k)))
+    (set! data (dissoc @data k)))
   (mm-g [_ k] (get @data k))
   (mm-s [_ k v]
-    (var-set data (assoc @data k v))))
+    (set! data (assoc @data k v))))
 
 (defn make-mmap ^{ :doc "" }
   []
