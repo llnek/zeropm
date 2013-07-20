@@ -61,6 +61,8 @@
 
 (defn is-nichts? [obj] (identical? obj *NICHTS*))
 
+(defn notnil? [x] (not (nil? x)))
+
 (defn flatten-nil ^{ :doc "" }
   [vs]
   (cond
@@ -407,8 +409,20 @@
                    (assoc sum (keyword k) (.get props k))) {} (seq (.keySet props))))
 
 
+(defprotocol MutableMapAPI
+  (mm-r [_ k] )
+  (mm-g [_ k] )
+  (mm-s [_ k v]))
+(deftype MutableMap [ ^:unsynchronized-mutable data ] MutableMapAPI
+  (mm-r [_ k]
+    (var-set data (dissoc @data k)))
+  (mm-g [_ k] (get @data k))
+  (mm-s [_ k v]
+    (var-set data (assoc @data k v))))
 
-
+(defn make-mmap ^{ :doc "" }
+  []
+  (MutableMap. {}))
 
 
 

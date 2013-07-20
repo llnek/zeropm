@@ -1,44 +1,92 @@
+;;
+;; COPYRIGHT (C) 2013 CHERIMOIA LLC. ALL RIGHTS RESERVED.
+;;
+;; THIS IS FREE SOFTWARE; YOU CAN REDISTRIBUTE IT AND/OR
+;; MODIFY IT UNDER THE TERMS OF THE APACHE LICENSE
+;; VERSION 2.0 (THE "LICENSE").
+;;
+;; THIS LIBRARY IS DISTRIBUTED IN THE HOPE THAT IT WILL BE USEFUL
+;; BUT WITHOUT ANY WARRANTY; WITHOUT EVEN THE IMPLIED WARRANTY OF
+;; MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+;;
+;; SEE THE LICENSE FOR THE SPECIFIC LANGUAGE GOVERNING PERMISSIONS
+;; AND LIMITATIONS UNDER THE LICENSE.
+;;
+;; You should have received a copy of the Apache License
+;; along with this distribution; if not you may obtain a copy of the
+;; License at
+;; http://www.apache.org/licenses/LICENSE-2.0
+;;
+
 (ns ^{ :doc ""
        :author "kenl" }
   comzotohcljc.wflow.core )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defprotocol Activity
-  (chain-another [_ act] )
-  (reify*  [_ cur] )
-  (realize! [_ cur] ))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(deftype Composite [options cache] Activity
-  (chain-another [_ act] )
-  (reify*  [_ cur] )
-  (realize! [_ cur] )
-  CompositeAPI
-  (size [_]  (count @cache))
-  (add [this act]
-    (let [ f (:on-add options) ]
-      (dosync (ref-set cache (conj @cache act)))
-      (when (fn? f) (apply f act))))
-  (reifyInnerSteps [outer]
-    (IterWrapper. outer @cache))
-)
+(require '[comzotohcljc.util.coreutils :as CU])
 
-(defn make-composite [a & more]
-  (Group. a b))
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(deftype Nihil [] Activity
-  (chain-another [this act] (make-composite this act))
-  (reify* [_ cur] (reifyZero (.flow cur)))
-  (realize! [_ cur] nil))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defprotocol MutableObjectAPI
+  (setf [_ k v] )
+  (getf [_ k] )
+  (clrf [_ k] ))
 
+(defprotocol FlowPoint)
+(defprotocol Activity)
+
+(defmacro make-Activity [ & args ]
+  `(let [ impl# (CU/make-mmap) ]
+    (reify
+      MutableObjectAPI
+      (setf [_ k v] (.mm-s impl# k v))
+      (getf [_ k] (.mm-g impl# k))
+      (clrf [_ k] (.mm-r impl# k))
+      Activity
+      ~@(filterv CU/notnil? args))))
+
+
+
+
+
+
+(defmacro make-FlowPoint [ pipe & args ]
+  `(let [ impl# (CU/make-mmap) ]
+    (with-meta (reify
+      MutableObjectAPI
+      (setf [_ k v] (.mm-s impl# k v))
+      (getf [_ k] (.mm-g impl# k))
+      (clrf [_ k] (.mm-r impl# k))
+      Runnable
+      (run [me#] )
+      FlowPoint
+      ~@(filterv CU/notnil? args)) { :pipeline ~pipe } )))
+
+
+(defn fw-configure! [fp ac cur]
+  (do
+    (.setf fp :template ac)
+    (.setf fp :next cur)))
+
+
+(defmethod fw-realize! [fw]
+  (let [ a (.getf fw :template) ]
+    (ac-realize! a fw)
+    fw))
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 
